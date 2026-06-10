@@ -1,0 +1,1746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Navigator</title>
+  <link rel="icon" type="image/svg+xml" href="/static/Images/Navigator.svg"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+  <!-- ══ CSS FILES ══ -->
+  <link rel="stylesheet" href="/static/css/base.css"/>
+  <link rel="stylesheet" href="/static/css/components.css"/>
+  <link rel="stylesheet" href="/static/css/pages.css"/>
+  <link rel="stylesheet" href="/static/css/file_upload.css"/>
+  <link rel="stylesheet" href="/static/css/analytics.css"/>
+  <link rel="stylesheet" href="/static/css/feedback.css"/>
+  <link rel="stylesheet" href="/static/css/tool_editor.css"/>
+  <link rel="stylesheet" href="/static/css/scenario_library.css"/>
+  <link rel="stylesheet" href="/static/css/admin_scenarios.css"/>
+  <link rel="stylesheet" href="/static/css/auth.css"/>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     LOGIN SCREEN
+══════════════════════════════════════ -->
+<div id="authScreen">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">🧭</div>
+      <div class="auth-logo-text">AI Navigator</div>
+    </div>
+    <div class="auth-title">Welcome back</div>
+    <div class="auth-subtitle">Sign in with your <strong>@bs.nttdata.com</strong> work email to access your personalised AI workspace.</div>
+    <div class="auth-divider"></div>
+    <form id="authForm" autocomplete="off">
+      <label class="auth-label" for="authEmailInput">Work Email Address</label>
+      <div class="auth-input-wrap">
+        <span class="auth-input-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+        </span>
+        <input class="auth-input" type="email" id="authEmailInput" placeholder="you@bs.nttdata.com" required autocomplete="off"/>
+      </div>
+      <div class="auth-error" id="authError"></div>
+      <button class="auth-submit-btn" type="submit" id="authSubmitBtn">Sign In →</button>
+    </form>
+    <div class="auth-trust-row">
+      <span class="auth-trust-item">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Secure access
+      </span>
+      <span class="auth-trust-item">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Role-based access
+      </span>
+      <span class="auth-trust-item">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        Session only
+      </span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     APP SHELL (hidden until login)
+══════════════════════════════════════ -->
+<div id="appShell" style="display:none;">
+
+<!-- ══════════════════════════════════════
+     HAMBURGER MENU DRAWER
+══════════════════════════════════════ -->
+<div class="menu-drawer-overlay" id="menuDrawerOverlay"></div>
+<div class="menu-drawer" id="menuDrawer">
+  <h3>Version 1.0.0</h3>
+  <a href="https://itellicloud.sharepoint.com/:b:/r/sites/US-saleshub/Shared%20Documents/06-%20Digital%20Innovations%20Internal%20Documents/12-%20Artificial%20Intelligence%20and%20Machine%20Learning%20Projects/2026%20-%20AI%20Navigator/AI%20Navigator%20v1.0.0/Release%20Document%20-%20AI%20Navigator%20v1.0.0.pdf?csf=1&web=1&e=VJr3z3" class="menu-link">📄 Release document</a>
+  <a href="https://itellicloud.sharepoint.com/:b:/r/sites/US-saleshub/Shared%20Documents/06-%20Digital%20Innovations%20Internal%20Documents/12-%20Artificial%20Intelligence%20and%20Machine%20Learning%20Projects/2026%20-%20AI%20Navigator/AI%20Navigator%20v1.0.0/Useer_manual_AI-Navigator.pdf?csf=1&web=1&e=tcxscn" class="menu-link">📖 User manual</a>
+  <a href="#" class="menu-link fb-open-form-trigger">💬 Feedback Form</a>
+  <button class="menu-link ss-open-trigger" id="drawerSuggestScenario" type="button">📝 Submit Scenario</button>
+
+  <div class="drawer-admin-section" id="drawerAdminSection">
+    <div class="drawer-admin-divider"></div>
+    <div class="drawer-admin-label">Admin</div>
+    <button class="menu-link" id="dropAnalytics">📊 Analytics Dashboard</button>
+    <button class="menu-link" id="dropFeedbackView">💬 View Feedback</button>
+    <button class="menu-link" id="dropToolChangeLog">📝 Tools Change Log</button>
+    <button class="menu-link" id="dropPolicyUpload">📋 Upload Policy</button>
+    <button class="menu-link" id="dropScenarios">📝 Scenarios</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SIDEBAR OVERLAY
+══════════════════════════════════════ -->
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<!-- ══════════════════════════════════════
+     HEADER
+══════════════════════════════════════ -->
+<header>
+  <div class="header-content">
+    <div class="hdr-left">
+      <button class="hamburger" id="hamburgerBtn" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+      <img src="/static/Images/Logo-White.png" alt="Logo" class="hdr-logo" onerror="this.style.display='none'"/>
+    </div>
+    <div class="hdr-center">
+      <div class="hdr-title-wrap">
+        <img src="/static/Images/Navigator.svg" alt="AI Compass" class="hdr-compass-icon"/>
+        <div class="hdr-title">AI Navigator</div>
+      </div>
+    </div>
+
+    <div class="hdr-right-col">
+        <span id="authUserBadge"></span>
+        <div class="hdr-menu-wrap" id="hdrMenuWrap">
+            <button class="hdr-toggle-btn" id="hdrToggleBtn" aria-label="Profile menu">
+              <div class="hdr-profile-circle">
+                <svg class="hdr-profile-svg" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                </svg>
+              </div>
+            </button>
+            <div class="hdr-dropdown" id="hdrDropdown">
+              <button class="hdr-drop-item" id="authLogoutBtn">
+                <span>🚪</span> Sign out
+              </button>
+            </div>
+        </div>
+    </div>
+  </div>
+</header>
+
+<!-- ══════════════════════════════════════
+     TAB NAVIGATION
+══════════════════════════════════════ -->
+<nav class="tab-navigation">
+  <div class="tab-nav-inner">
+    <button class="nav-tab active" data-page="home">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+      </svg>
+      Home
+    </button>
+    <button class="nav-tab" data-page="promptlibrary">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+      </svg>
+      Scenario Library
+    </button>
+    <button class="nav-tab" data-page="tools">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+        <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+      </svg>
+      AI Tools
+    </button>
+    <button class="nav-tab" data-page="history">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+      </svg>
+      History
+    </button>
+  </div>
+</nav>
+
+<!-- ══════════════════════════════════════
+     SIDEBAR
+══════════════════════════════════════ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-inner">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Navigation</div>
+      <button class="sidebar-item" data-page="analytics">📊 Analytics</button>
+      <button class="sidebar-item" data-page="admin-scenarios">📝 Scenarios</button>
+      <a href="#" class="menu-link">📄 Release document</a>
+      <a href="#" class="menu-link">📖 User manual</a>
+      <a href="#" class="menu-link fb-open-form-trigger">💬 Feedback Form</a>
+      <a href="#" class="menu-link" id="sidebarFeedbackView">📋 View Feedbacks</a>
+    </div>
+    <!-- <div class="sidebar-section">
+      <div class="sidebar-label">Quick Stats</div>
+      <div class="sidebar-stat">
+        <span class="sidebar-stat-label">Total Runs</span>
+        <span class="sidebar-stat-val" id="sbTotalRuns">—</span>
+      </div>
+      <div class="sidebar-stat">
+        <span class="sidebar-stat-label">Avg Rating</span>
+        <span class="sidebar-stat-val" id="sbAvgRating">—</span>
+      </div>
+      <div class="sidebar-stat">
+        <span class="sidebar-stat-label">Policies</span>
+        <span class="sidebar-stat-val" id="sbPolicies">—</span>
+      </div> -->
+    </div>
+  </div>
+</aside>
+
+<!-- ══════════════════════════════════════
+     MAIN CONTENT
+══════════════════════════════════════ -->
+<main class="main" id="mainContent">
+
+  <!-- ── HOME PAGE ── -->
+  <section class="page active" id="page-home">
+    <div class="home-outer" id="homeOuter">
+
+      <!-- ══ CHAT PANEL (left, resizable) ══ -->
+      <div class="chat-panel" id="chatPanel">
+        <div class="chat-panel-inner">
+
+          <!-- Chat header -->
+          <div class="chat-panel-header">
+            <div class="chat-panel-header-text">
+              <div class="chat-panel-title">
+                <div class="chat-status-dot"></div>
+                AI Task Assistant
+              </div>
+              <div class="chat-panel-subtitle">Tell me what you need — I'll guide you</div>
+            </div>
+            <div class="chat-panel-header-actions">
+              <button class="chat-reset-btn" id="chatResetBtn" title="Start a new chat and clear everything">New Task</button>
+            </div>
+          </div>
+
+          <!-- Summary bar (shows extracted role / task_type) -->
+          <div class="chat-summary-bar" id="chatSummaryBar">
+            <div class="chat-summary-label">Gathered so far</div>
+            <div class="chat-summary-tags" id="chatSummaryTags"></div>
+          </div>
+
+          <!-- Messages -->
+          <div class="chat-messages" id="chatMessages"></div>
+
+          <!-- Typing indicator -->
+          <div class="chat-typing" id="chatTyping">
+            <div class="chat-typing-dot"></div>
+            <div class="chat-typing-dot"></div>
+            <div class="chat-typing-dot"></div>
+          </div>
+
+          <!-- Ready banner -->
+          <div class="chat-ready-banner" id="chatReadyBanner">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Task understood! Click <strong style="margin:0 3px;">Generate Response</strong> below to proceed.
+          </div>
+
+          <!-- Input + actions -->
+          <div class="chat-input-area">
+            <div class="chat-input-row">
+              <textarea
+                class="chat-input"
+                id="chatInput"
+                placeholder="Type your message…"
+                rows="1"
+                autocomplete="off"
+              ></textarea>
+              <button class="chat-send-btn" id="chatSendBtn" title="Send">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              </button>
+            </div>
+            <div class="chat-actions">
+              <button class="chat-action-btn" id="chatSkipAllBtn" title="Skip remaining questions and proceed with what you've shared">
+                Skip All &amp; Proceed
+              </button>
+              <button class="chat-action-btn primary-action" id="chatGenerateBtn" disabled title="Generate response using the gathered task info">
+                <!-- <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> -->
+                Generate Response
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ══ DRAG HANDLE ══ -->
+      <div class="home-drag-handle" id="homeDragHandle">
+        <button class="chat-toggle-btn" id="chatToggleBtn" title="Toggle chat width">»</button>
+      </div>
+
+      <!-- Hidden inputs kept for JS compatibility — not shown to user -->
+      <input type="hidden" id="selRole" />
+      <input type="hidden" id="selTaskType" />
+      <input type="hidden" id="userInput" />
+      <span style="display:none" id="charCount">0</span>
+
+      <!-- ══ RIGHT SIDE: results only ══ -->
+      <div class="home-right" id="homeRight">
+
+      <!-- RIGHT COLUMN: Steps -->
+      <div>
+        <div class="step-indicators">
+          <div class="step-ind active" id="step-ind-1"><div class="step-num">1</div> Describe</div>
+          <div class="step-ind" id="step-ind-2"><div class="step-num">2</div> Classify</div>
+          <div class="step-ind" id="step-ind-3"><div class="step-num">3</div> Result</div>
+        </div>
+
+        <!-- STEP 1: Waiting -->
+        <div class="step-panel active" id="step-1">
+          <div class="card">
+            <div class="card-bd">
+              <div class="empty-state" style="padding:60px 20px">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                <p style="font-size:15px;font-weight:700;color:var(--text2);margin-bottom:6px">Ready to generate</p>
+                <p>Chat with the assistant on the left — describe your task and click <strong>Generate Response</strong>.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 2: Processing -->
+        <div class="step-panel" id="step-2">
+          <div class="card">
+            <div class="card-bd">
+              <div class="processing-wrap">
+                <div class="proc-icon">
+                  <div class="proc-ring"></div>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                </div>
+                <div class="proc-steps" id="processingSteps">
+                  <div class="proc-step" id="proc-1"><div class="proc-dot"></div><span>Classifying intent &amp; industry…</span></div>
+                  <div class="proc-step" id="proc-2"><div class="proc-dot"></div><span>Matching role &amp; task context…</span></div>
+                  <div class="proc-step" id="proc-3"><div class="proc-dot"></div><span>Recommending best AI tool…</span></div>
+                  <div class="proc-step" id="proc-4"><div class="proc-dot"></div><span>Retrieving company policies…</span></div>
+                  <div class="proc-step" id="proc-5"><div class="proc-dot"></div><span>Building optimised prompt…</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 3: Result -->
+        <div class="step-panel" id="step-3">
+          <div class="card">
+            <div class="card-bd">
+
+
+
+              <div id="policyBlockedBox" style="display:none"></div>
+
+              <div class="result-meta" id="resultMeta"></div>
+              <div id="toolRecBox"></div>
+              <div id="policyFlagsBox"></div>
+              <div id="alternativesBox"></div>
+
+              <!-- Confidentiality notice — shown only when task is NOT blocked -->
+              <div id="confidentialityNotice" style="display:none;align-items:flex-start;gap:10px;
+                padding:11px 14px;border-radius:10px;margin-bottom:14px;
+                background:#FFF8E6;border:1.5px solid #FCD34D;">
+                <span style="font-size:17px;flex-shrink:0;margin-top:1px;">🔒</span>
+                <div style="font-size:12.5px;color:#78350F;line-height:1.55;">
+                  <strong style="display:block;margin-bottom:2px;font-size:13px;color:#92400E;">
+                    Important Reminder — Handle with Care
+                  </strong>
+                  Do not enter confidential, personal, or commercially sensitive company data into AI tools.
+                  Always use only <strong>approved tools</strong> from your organisation's registry, and
+                  review all AI-generated output before sharing externally.
+                </div>
+              </div>
+
+              <div class="output-tabs">
+                <button class="output-tab active" data-out="prompt">📝 Prompt</button>
+                <button class="output-tab" data-out="policies">🛡️ Policies Applied</button>
+              </div>
+
+              <div class="output-panel active" id="out-prompt">
+              <div id="revisedBanner" class="revised-banner" style="display:none"></div>
+              <!-- Edit / Copy / Save toolbar -->
+              <div id="promptToolbar" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+                <button class="btn btn-secondary btn-sm" id="btnEditPrompt">&#9998; Edit</button>
+                <button class="btn btn-secondary btn-sm" id="btnCopyPrompt">&#128203; Copy</button>
+                <button class="btn btn-secondary btn-sm" id="btnSavePrompt">&#9733; Save to Favorites</button>
+              </div>
+
+              <div class="output-content code-block" id="resultPrompt"></div>
+
+              <!-- Edit mode textarea — hidden by default -->
+              <textarea id="promptEditArea" style="display:none;width:100%;min-height:340px;padding:14px;font-family:var(--mono);font-size:12px;line-height:1.5;border:2px solid var(--primary);border-radius:var(--radius-sm);background:var(--bg-white);color:var(--text);resize:vertical;outline:none;box-sizing:border-box;"></textarea>
+
+              <div id="promptEditOk" style="display:none;margin-top:8px;display:none;">
+                <button class="btn btn-primary btn-sm" id="btnPromptOk">&#10003; OK — Apply Changes</button>
+                <button class="btn btn-ghost btn-sm" id="btnPromptCancelEdit" style="margin-left:6px;">Cancel</button>
+              </div>
+
+              <!-- Refinement box — CORLO Prompt tab only -->
+              <div class="refinement-box" id="refinementBox">
+                <div class="refinement-box-title">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  Not happy with the prompt? Ask to revise it
+                </div>
+                <textarea class="refinement-input" id="refinementInput" placeholder="e.g. Make it shorter and more formal… or Focus more on risk analysis… or Add a section on budget considerations…"></textarea>
+                <div class="refinement-actions">
+                  <button class="btn btn-primary btn-sm" id="btnRefine">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    Revise Prompt
+                  </button>
+                  <span id="refineSpinner" style="display:none" class="char-count">Revising…</span>
+                </div>
+              </div>
+
+              <!-- Feedback — CORLO Prompt tab only -->
+              <div class="feedback-row">
+                <span class="feedback-label">Rate this result:</span>
+                <div class="stars" id="feedbackStars">
+                  <button class="star" data-rating="1">★</button>
+                  <button class="star" data-rating="2">★</button>
+                  <button class="star" data-rating="3">★</button>
+                  <button class="star" data-rating="4">★</button>
+                  <button class="star" data-rating="5">★</button>
+                </div>
+                <div class="feedback-ml">
+                  <button class="btn btn-ghost btn-sm" id="btnCopyOutput">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                    Copy
+                  </button>
+                </div>
+              </div>
+            </div>
+
+<div class="output-panel" id="out-policies">
+  <div class="output-content html-content" id="resultPolicies"></div>
+</div>
+
+            </div>
+          </div>
+        </div>
+      </div><!-- /right col of home-right -->
+      </div><!-- /home-right -->
+    </div><!-- /home-outer -->
+  </section>
+
+  <!-- ── HISTORY PAGE ── -->
+  <section class="page" id="page-history">
+    <div class="page-scroll-body">
+    <div class="page-header">
+      <div>
+        <h2 class="page-title" id="historyPageTitle">Run History</h2>
+        <p class="page-subtitle" id="historyPageSubtitle">Your previous orchestration runs with full audit logs.</p>
+      </div>
+      <button class="btn btn-secondary" id="btnRefreshHistory">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+        Refresh
+      </button>
+    </div>
+    <div class="history-list" id="historyList">
+      <div class="empty-state">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <p>No history yet.</p>
+      </div>
+    </div>
+    </div>
+  </section>
+
+  <!-- ── AI TOOLS PAGE ── -->
+  <section class="page" id="page-tools">
+    <div class="tools-page">
+
+      <!-- Sticky top bar -->
+      <div class="tools-top-bar">
+        <div class="tools-header">
+          <div>
+            <h2 class="tools-title">AI Tools Registry</h2>
+            <p class="tools-subtitle">All available enterprise AI tools and their capabilities.</p>
+          </div>
+          <div class="tools-header-actions">
+            <input type="search" id="toolsSearch" class="tools-search" placeholder="Search tools…" aria-label="Search tools">
+            <button class="tools-register-btn" id="btnRegisterTool">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Register Tool
+            </button>
+          </div>
+        </div>
+
+        <!-- Toolbar row: view toggle left, category filter right -->
+        <div class="tools-toolbar-row">
+          <div class="tools-view-toggle">
+            <button class="tools-view-btn active" id="btnTileView" title="Tile view">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+              Grid
+            </button>
+            <button class="tools-view-btn" id="btnRowView" title="List view">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+              List
+            </button>
+          </div>
+          <div class="tools-toolbar-right">
+            <label class="tools-filter-label" for="toolsCategoryFilter">Filter by Category:</label>
+            <select id="toolsCategoryFilter" class="tools-cat-select">
+              <option value="">All Categories</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Body: sidebar + content -->
+      <div class="tools-body-scroll">
+        <div class="tools-layout">
+
+          <!-- Left sidebar -->
+          <nav class="tools-sidebar">
+            <div class="tools-side-section">
+              <div class="tools-side-label">Navigate</div>
+              <div id="toolsNavAll">
+                <div class="tools-nav-item active" data-role="all">
+                  <span class="tools-nav-dot"></span>
+                  <span class="tools-nav-label">All Tools</span>
+                  <span class="tools-nav-count" id="toolsCountBadge">0</span>
+                </div>
+              </div>
+            </div>
+            <div class="tools-side-section">
+              <div class="tools-side-label">What are you trying to do?</div>
+              <div id="toolsNavRoles">
+                <div class="tools-nav-item" data-role="sales">
+                  <span class="tools-nav-dot"></span>
+                  <span class="tools-nav-label">Sales</span>
+                  <span class="tools-nav-count"></span>
+                </div>
+                <div class="tools-nav-item" data-role="consulting">
+                  <span class="tools-nav-dot"></span>
+                  <span class="tools-nav-label">Consulting</span>
+                  <span class="tools-nav-count"></span>
+                </div>
+                <div class="tools-nav-item" data-role="hr">
+                  <span class="tools-nav-dot"></span>
+                  <span class="tools-nav-label">Human Resource</span>
+                  <span class="tools-nav-count"></span>
+                </div>
+                <div class="tools-nav-item" data-role="finance">
+                  <span class="tools-nav-dot"></span>
+                  <span class="tools-nav-label">Finance</span>
+                  <span class="tools-nav-count"></span>
+                </div>
+                <div class="tools-nav-item" data-role="marketing">
+                  <span class="tools-nav-dot"></span>
+                  <span class="tools-nav-label">Marketing</span>
+                  <span class="tools-nav-count"></span>
+                </div>
+                <div class="tools-nav-item" data-role="ams">
+                  <span class="tools-nav-dot"></span>
+                  <span class="tools-nav-label">AMS</span>
+                  <span class="tools-nav-count"></span>
+                </div>
+                <div class="tools-nav-item" data-role="developer">
+                  <span class="tools-nav-dot"></span>
+                  <span class="tools-nav-label">Developer</span>
+                  <span class="tools-nav-count"></span>
+                </div>
+                <div class="tools-nav-item" data-role="operations">
+                  <span class="tools-nav-dot"></span>
+                  <span class="tools-nav-label">Operations</span>
+                  <span class="tools-nav-count"></span>
+                </div>
+              </div>
+            </div>
+          </nav>
+
+          <!-- Right content -->
+          <div class="tools-content">
+            <div class="tools-grid" id="toolsGrid">
+              <div class="loading-spinner"><div class="spinner"></div></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── ANALYTICS PAGE ── -->
+  <section class="page" id="page-analytics">
+    <div class="page-scroll-body">
+    <div class="page-header">
+      <div>
+        <h2 class="page-title">Analytics</h2>
+        <p class="page-subtitle">Usage insights and performance metrics.</p>
+      </div>
+      <button class="btn btn-secondary" id="btnRefreshAnalytics">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+        Refresh
+      </button>
+    </div>
+    <div id="analyticsContent">
+      <div class="loading-spinner"><div class="spinner"></div></div>
+    </div>
+    </div>
+  </section>
+
+  <!-- ── POLICIES PAGE ── -->
+  <section class="page" id="page-policies">
+    <div class="page-header">
+      <div>
+        <h2 class="page-title">Company Policies</h2>
+        <p class="page-subtitle">Upload policy documents to guide AI tool recommendations and compliance.</p>
+      </div>
+    </div>
+    <div class="policies-layout">
+      <div class="upload-card">
+        <div class="upload-zone" id="uploadZone">
+          <div class="upload-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </div>
+          <p class="upload-title">Drop your policy file here</p>
+          <p class="upload-hint">Supports .pdf and .docx files</p>
+          <input type="file" id="policyFileInput" accept=".pdf,.docx" style="display:none"/>
+          <button class="btn btn-secondary btn-sm" id="btnBrowseFile">Browse Files</button>
+        </div>
+        <div id="uploadStatus" style="margin-top:12px;"></div>
+      </div>
+      <div class="policies-list-card">
+        <div class="card-header-row">
+          <span class="card-title">Indexed Policies</span>
+          <button class="btn btn-ghost btn-sm" id="btnRefreshPolicies">Refresh</button>
+        </div>
+        <div id="policiesList">
+          <div class="loading-spinner"><div class="spinner"></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── ADMIN SCENARIOS PAGE ── -->
+  <section class="page" id="page-admin-scenarios">
+    <div class="page-scroll-body">
+
+      <div class="page-header">
+        <div>
+          <h2 class="page-title">Scenarios Admin</h2>
+          <p class="page-subtitle">Review user-submitted scenario suggestions and manage the scenario log.</p>
+        </div>
+        <button class="btn btn-secondary" id="btnRefreshAdminScenarios">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+          Refresh
+        </button>
+      </div>
+
+      <!-- Sub-tabs -->
+      <div class="as-tabs">
+        <button class="as-tab active" data-astab="review">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+          Scenario Review
+          <span class="as-tab-badge" id="asPendingBadge">0</span>
+        </button>
+        <button class="as-tab" data-astab="log">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Scenario Log
+        </button>
+      </div>
+
+      <!-- ── REVIEW PANEL ── -->
+      <div class="as-panel active" data-aspanel="review">
+
+        <div class="as-filters">
+          <input class="as-search" type="text" id="asReviewSearch" placeholder="Search by title, group, keyword…" autocomplete="off"/>
+        </div>
+
+        <div id="asReviewList" class="as-card-list">
+          <div class="as-loading"><div class="spinner"></div></div>
+        </div>
+
+        <div class="as-pagination" id="asReviewPagination" style="display:none;">
+          <button class="as-page-btn" id="asReviewPrev">← Prev</button>
+          <span class="as-page-info" id="asReviewPageInfo"></span>
+          <button class="as-page-btn" id="asReviewNext">Next →</button>
+        </div>
+      </div>
+
+      <!-- ── LOG PANEL ── -->
+      <div class="as-panel" data-aspanel="log" style="display:none;">
+
+        <div class="as-filters">
+          <select class="as-select" id="asLogStatus">
+            <option value="all">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <input class="as-search" type="text" id="asLogSearch" placeholder="Search title, group, keyword…" autocomplete="off"/>
+        </div>
+
+        <div id="asLogTable" class="as-table-wrap">
+          <div class="as-loading"><div class="spinner"></div></div>
+        </div>
+
+        <div class="as-pagination" id="asLogPagination" style="display:none;">
+          <button class="as-page-btn" id="asLogPrev">← Prev</button>
+          <span class="as-page-info" id="asLogPageInfo"></span>
+          <button class="as-page-btn" id="asLogNext">Next →</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── SCENARIO LIBRARY PAGE ── -->
+  <section class="page" id="page-promptlibrary">
+    <div class="sl-page">
+
+      <!-- Sticky top bar -->
+      <div class="sl-top-bar">
+
+        <!-- Header row: title + search + actions -->
+        <div class="sl-header">
+          <div>
+            <h2>Scenario Library</h2>
+            <p class="sl-header-subtitle">Browse by group, filter by category, or search across all.</p>
+          </div>
+          <div class="sl-header-actions">
+            <input type="search" id="slSearch" class="sl-search" placeholder="Search scenarios, roles, prompts…" aria-label="Search scenarios">
+            <button class="sl-upload-btn" id="slRegisterScenarioBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Register Scenario
+            </button>
+          </div>
+        </div>
+
+        <!-- Horizontal Scenarios / Favorites tabs + Role filter on the right -->
+        <div class="sl-subtab-bar">
+          <div class="sl-subtab-tabs">
+            <button class="sl-subtab-btn active" data-sltab="scenarios">Scenarios</button>
+            <button class="sl-subtab-btn" data-sltab="favorites">Favorites</button>
+          </div>
+          <div class="sl-subtab-right">
+            <label class="sl-role-label" for="slRoleFilter">Filter by Role:</label>
+            <select id="slRoleFilter" class="sl-role-select">
+              <option value="">All Roles</option>
+            </select>
+          </div>
+        </div>
+
+      </div><!-- /.sl-top-bar -->
+
+      <!-- Body: sidebar + content -->
+      <div class="sl-body-scroll">
+
+        <!-- SCENARIOS PANEL -->
+        <div class="sl-subtab-panel active" id="sl-panel-scenarios">
+
+          <!-- Two-column layout: sidebar + main -->
+          <div class="sl-layout">
+
+            <!-- Left sidebar: mega-group navigation -->
+            <nav class="sl-sidebar">
+              <div class="sl-side-section">
+                <div class="sl-side-label">Navigate</div>
+                <div id="slMegaNav">
+                  <!-- populated by JS -->
+                  <div class="sl-nav-item active" data-mega="all">
+                    <span class="sl-nav-dot" style="background:#3B82F6"></span>
+                    <span class="sl-nav-label">All Scenarios</span>
+                    <span class="sl-nav-count" id="slCountBadge">0</span>
+                  </div>
+                </div>
+              </div>
+              <div class="sl-side-section">
+                <div class="sl-side-label">What are you trying to do?</div>
+                <div id="slMegaNavGroups">
+                  <!-- mega-group items populated by JS below the "All" item -->
+                </div>
+              </div>
+            </nav>
+
+            <!-- Right content -->
+            <div class="sl-content">
+              <div class="sl-loading" id="slLoading" style="display:none;">
+                <div class="sl-spinner"></div>
+                Loading scenarios…
+              </div>
+              <div id="slMainArea">
+                <div class="sl-grid-heading" id="slGridHeading"></div>
+                <div id="slScenarioGrid"></div>
+                <div id="slScenarioEmpty" class="sl-empty hidden">
+                  <div class="sl-empty-icon">🔎</div>
+                  <h3>No scenarios found</h3>
+                  <p>Try a different group, category, or search term.</p>
+                </div>
+              </div>
+            </div>
+
+          </div><!-- /.sl-layout -->
+        </div><!-- /#sl-panel-scenarios -->
+
+        <!-- FAVORITES PANEL -->
+        <div class="sl-subtab-panel" id="sl-panel-favorites">
+          <div class="sl-fav-grid" id="slFavGrid"></div>
+          <div id="slFavEmpty" class="sl-empty hidden">
+            <div class="sl-empty-icon">⭐</div>
+            <h3>No favorites yet</h3>
+            <p>Click <strong>☆ Save</strong> on any scenario card to add it here.</p>
+          </div>
+        </div>
+
+      </div><!-- /.sl-body-scroll -->
+    </div><!-- /.sl-page -->
+  </section>
+
+</main>
+
+<!-- LOG MODAL -->
+<div class="modal-overlay" id="logModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title">Run Log</h3>
+      <button class="modal-close" id="btnCloseModal">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="logModalBody"></div>
+  </div>
+</div>
+
+<!-- EDIT LOG MODAL -->
+<!-- <div class="modal-overlay" id="editLogModal">
+  <div class="modal" style="max-width:680px;">
+    <div class="modal-header">
+      <h3 class="modal-title">&#9998; Edit Log Entry</h3>
+      <button class="modal-close" onclick="closeEditModal()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="editLogModalBody"></div>
+    <div class="modal-footer" style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;">
+      <button class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+      <button class="btn btn-primary" id="btnConfirmEdit" onclick="saveEditedLog()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Confirm Changes
+      </button>
+    </div>
+  </div>
+</div> -->
+
+<!-- TOAST -->
+<div class="toast-container" id="toastContainer"></div>
+
+
+
+
+
+
+
+
+
+
+
+<!-- ══════════════════════════════════════
+     POLICY UPLOAD MODAL
+══════════════════════════════════════ -->
+<div class="fu-overlay" id="puOverlay"></div>
+<div class="fu-modal" id="puModal">
+  <div class="fu-modal-header">
+    <span>📋 Upload Policy Document</span>
+    <button class="fu-close-btn" id="puCloseBtn">✕</button>
+  </div>
+  <div class="fu-modal-body">
+    <div class="fu-drop-zone" id="puDropZone">
+      <div class="fu-drop-icon">📄</div>
+      <div class="fu-drop-title">Drop your policy document here</div>
+      <div class="fu-drop-sub">or click to browse — .pdf or .docx files accepted</div>
+      <input type="file" id="puFileInput" accept=".pdf,.docx" hidden />
+    </div>
+    <div class="fu-file-info" id="puFileInfo" style="display:none">
+      <span class="fu-file-name" id="puFileName"></span>
+      <button class="fu-clear-btn" id="puClearBtn">✕</button>
+    </div>
+    <div class="fu-required-note">
+      Uploaded documents will be indexed and used to guide AI responses and compliance checks.<br/>
+      Supported formats: <code>.pdf</code>, <code>.docx</code>
+    </div>
+  </div>
+  <div class="fu-modal-footer">
+    <button class="fu-cancel-btn" id="puCancelBtn">Cancel</button>
+    <button class="fu-upload-btn" id="puUploadBtn" disabled>Upload & Index</button>
+  </div>
+  <div class="fu-status" id="puStatus" style="display:none"></div>
+</div>
+
+
+
+
+
+<!-- ══════════════════════════════════════
+     REGISTER SCENARIO MODAL
+══════════════════════════════════════ -->
+<div class="modal-overlay" id="registerScenarioOverlay" role="dialog" aria-modal="true" aria-labelledby="registerScenarioTitle">
+  <div class="te-modal" style="max-width:660px;">
+
+    <!-- Header -->
+    <div class="te-header">
+      <div class="te-header-left">
+        <div style="font-size:22px;">📚</div>
+        <div>
+          <div class="te-header-name" id="registerScenarioTitle">Register New Scenario</div>
+          <div class="te-header-cat">Add a new scenario to the Scenario Library</div>
+        </div>
+      </div>
+      <div class="te-header-right">
+        <button class="te-close-btn" id="btnCloseRegisterScenario" aria-label="Close">✕</button>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="te-tabs">
+      <button class="te-tab active" data-rstab="manual">✏️ Manual Input</button>
+      <button class="te-tab"        data-rstab="fileupload">📂 File Upload</button>
+    </div>
+
+    <!-- Body -->
+    <div class="te-body">
+
+      <!-- MANUAL INPUT PANEL -->
+      <div class="te-panel active" data-rspanel="manual">
+        <div class="te-edit-body" style="padding:20px;">
+
+          <div class="te-edit-note">
+            ✏️ <strong>Manual entry</strong> — fill in the fields below and click Save Scenario.
+          </div>
+
+          <div class="te-form-grid">
+            <div>
+              <label class="te-label" for="rsTitle">Scenario Title <span class="te-hint">(required)</span></label>
+              <input class="te-input" type="text" id="rsTitle" placeholder="e.g. Write a client proposal" autocomplete="off"/>
+            </div>
+            <div>
+              <label class="te-label" for="rsMegaGroup">Group <span class="te-hint">(required)</span></label>
+              <select class="te-input" id="rsMegaGroup">
+                <option value="">— Select Group —</option>
+              </select>
+            </div>
+            <div>
+              <label class="te-label" for="rsCategory">Category <span class="te-hint">(required)</span></label>
+              <select class="te-input" id="rsCategory">
+                <option value="">— Select Category —</option>
+              </select>
+            </div>
+            <div>
+              <label class="te-label" for="rsPersona">Persona / Role <span class="te-hint">(required)</span></label>
+              <select class="te-input" id="rsPersona">
+                <option value="">— Select Persona / Role —</option>
+              </select>
+            </div>
+            <div id="rsActivatePhaseRow" style="display:none;">
+              <label class="te-label" for="rsActivatePhase">Activate Phase</label>
+              <select class="te-input" id="rsActivatePhase">
+                <option value="">— Select Phase —</option>
+                <option value="Discover">Discover</option>
+                <option value="Prepare">Prepare</option>
+                <option value="Explore">Explore</option>
+                <option value="Realize">Realize</option>
+                <option value="Deploy">Deploy</option>
+                <option value="Run">Run</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="te-form-full" style="margin-top:4px;">
+            <label class="te-label" for="rsScenario">Scenario / Prompt Body <span class="te-hint">(required)</span></label>
+            <textarea class="te-textarea" id="rsScenario" rows="7" placeholder="Write the full scenario or prompt text here…"></textarea>
+          </div>
+
+          <div id="rsStatus" style="display:none;padding:10px 12px;border-radius:8px;font-size:13px;margin-top:12px;"></div>
+
+        </div>
+      </div>
+
+      <!-- FILE UPLOAD PANEL (Excel / bulk upload) -->
+      <div class="te-panel" data-rspanel="fileupload" style="display:none;">
+        <div style="padding:24px 20px;">
+
+          <div class="te-edit-note" style="background:#eff6ff;border-color:#bfdbfe;color:#1e40af;">
+            📂 <strong>Bulk upload</strong> — upload an Excel file (.xlsx) to replace or extend the Scenario Library.
+          </div>
+
+          <div id="rsBulkDropZone" style="border:2px dashed var(--border);border-radius:12px;padding:32px 20px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;margin-top:16px;">
+            <div style="font-size:36px;margin-bottom:8px;">📊</div>
+            <div style="font-size:14px;font-weight:600;color:var(--text2);margin-bottom:4px;">Drop your Scenario Library Excel here</div>
+            <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">or click to browse — .xlsx files only</div>
+            <button class="btn btn-secondary" id="btnBrowseBulkScenarios" type="button" style="font-size:12px;padding:6px 14px;">Browse File</button>
+            <input type="file" id="rsBulkFileInput" accept=".xlsx,.xlsm,.xls" style="display:none"/>
+          </div>
+
+          <div id="rsBulkFileInfo" style="display:none;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border);margin-top:12px;">
+            <span style="font-size:13px;flex:1;" id="rsBulkFileName"></span>
+            <button id="rsBulkClearBtn" style="background:none;border:none;cursor:pointer;color:#9ca3af;font-size:14px;padding:2px 4px;" title="Remove">✕</button>
+          </div>
+
+          <div style="margin-top:14px;padding:10px 14px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border);font-size:12px;color:var(--text3);line-height:1.6;">
+            Required sheet: <code>Scenario Library</code> — Required columns: <code>Group</code>,
+            <code>Category</code>, <code>Scenario Title</code>, <code>Persona / Role</code>, <code>Scenarios</code>
+          </div>
+
+          <div id="rsBulkStatus" style="display:none;margin-top:12px;padding:10px 14px;border-radius:8px;font-size:13px;"></div>
+
+        </div>
+      </div>
+
+    </div><!-- /.te-body -->
+
+    <!-- Footer -->
+    <div class="te-footer">
+      <div class="te-footer-left">
+        <button class="te-btn te-btn-secondary" id="btnCancelRegisterScenario">Cancel</button>
+      </div>
+      <div class="te-footer-right" id="rsFooterRight">
+        <button class="te-btn te-btn-primary" id="btnSaveRegisterScenario">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Save Scenario
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- SUGGEST SCENARIO MODAL -->
+<div class="modal-overlay" id="suggestScenarioOverlay" role="dialog" aria-modal="true" aria-labelledby="suggestScenarioTitle">
+  <div class="te-modal" style="max-width:660px;">
+
+    <div class="te-header">
+      <div class="te-header-left">
+        <div style="font-size:22px;">📝</div>
+        <div>
+          <div class="te-header-name" id="suggestScenarioTitle">Submit Scenario</div>
+          <div class="te-header-cat">Submit your idea — an admin will review before adding to the library</div>
+        </div>
+      </div>
+      <div class="te-header-right">
+        <button class="te-close-btn" id="btnCloseSuggestScenario" aria-label="Close">✕</button>
+      </div>
+    </div>
+
+    <div class="te-body">
+      <div class="te-panel active" data-rspanel="manual">
+        <div class="te-edit-body" style="padding:20px;">
+
+          <div class="te-edit-note">
+            ✏️ <strong>Manual entry</strong> — fill in the fields below and click Submit Scenario.
+          </div>
+
+          <div class="te-form-grid">
+            <div>
+              <label class="te-label" for="ssTitle">Scenario Title <span class="te-hint">(required)</span></label>
+              <input class="te-input" type="text" id="ssTitle" placeholder="e.g. Write a client proposal" autocomplete="off"/>
+            </div>
+            <div>
+              <label class="te-label" for="ssMegaGroup">Group <span class="te-hint">(required)</span></label>
+              <select class="te-input" id="ssMegaGroup">
+                <option value="">— Select Group —</option>
+              </select>
+            </div>
+            <div>
+              <label class="te-label" for="ssCategory">Category <span class="te-hint">(required)</span></label>
+              <select class="te-input" id="ssCategory">
+                <option value="">— Select Category —</option>
+              </select>
+            </div>
+            <div>
+              <label class="te-label" for="ssPersona">Persona / Role <span class="te-hint">(required)</span></label>
+              <select class="te-input" id="ssPersona">
+                <option value="">— Select Persona / Role —</option>
+              </select>
+            </div>
+            <div id="ssActivatePhaseRow" style="display:none;">
+              <label class="te-label" for="ssActivatePhase">Activate Phase</label>
+              <select class="te-input" id="ssActivatePhase">
+                <option value="">— Select Phase —</option>
+                <option value="Discover">Discover</option>
+                <option value="Prepare">Prepare</option>
+                <option value="Explore">Explore</option>
+                <option value="Realize">Realize</option>
+                <option value="Deploy">Deploy</option>
+                <option value="Run">Run</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="te-form-full" style="margin-top:4px;">
+            <label class="te-label" for="ssScenario">Scenario / Prompt Body <span class="te-hint">(required)</span></label>
+            <textarea class="te-textarea" id="ssScenario" rows="7" placeholder="Write the full scenario or prompt text here…"></textarea>
+          </div>
+
+          <div id="ssStatus" style="display:none;padding:12px 16px;border-radius:8px;font-size:13.5px;font-weight:600;margin-top:14px;line-height:1.5;"></div>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="te-footer">
+      <div class="te-footer-left">
+        <button class="te-btn te-btn-secondary" id="btnCancelSuggestScenario">Cancel</button>
+      </div>
+      <div class="te-footer-right">
+        <button class="te-btn te-btn-primary" id="btnSubmitSuggestScenario">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          Submit Scenario
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- SCENARIO GENERATE MODAL -->
+<div class="modal-overlay" id="scenarioGenModal">
+  <div class="modal" style="max-width:720px;">
+    <div class="modal-header">
+      <h3 class="modal-title">⚡ Review & Edit Before Generate</h3>
+      <button class="modal-close" id="btnCloseScenarioGenModal" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <p style="margin:0 0 10px;color:var(--text3);font-size:13px;line-height:1.4;">
+        This template may include placeholders like <code>[topic]</code>. Update anything you want, then generate.
+      </p>
+
+      <div class="row2" style="margin-bottom:10px;">
+        <div>
+          <label class="field-label" for="scenarioRole">Role</label>
+          <input type="text" id="scenarioRole" list="scenarioRoleList" placeholder="Select or type role..." autocomplete="off" />
+          <datalist id="scenarioRoleList">
+            <option value="Consultant / Manager"></option>
+            <option value="Executive / Director"></option>
+            <option value="Developer / Technical"></option>
+            <option value="Business Analyst"></option>
+            <option value="Sales / BD"></option>
+            <option value="Marketing / Comms"></option>
+            <option value="HR / People Ops"></option>
+            <option value="Finance / Accounting"></option>
+          </datalist>
+        </div>
+        <div>
+          <label class="field-label" for="scenarioTaskType">Task Type</label>
+          <input type="text" id="scenarioTaskType" list="scenarioTaskTypeList" placeholder="Select or type task type..." autocomplete="off" />
+          <datalist id="scenarioTaskTypeList">
+            <option value="Research &amp; Analysis"></option>
+            <option value="Writing &amp; Docs"></option>
+            <option value="Strategy &amp; Planning"></option>
+            <option value="Data Analysis"></option>
+            <option value="Code &amp; Dev"></option>
+            <option value="Creative Content"></option>
+            <option value="Communication"></option>
+            <option value="Learning &amp; Training"></option>
+            <option value="Process Automation"></option>
+            <option value="Decision Support"></option>
+          </datalist>
+        </div>
+      </div>
+
+      <label class="field-label" for="scenarioDesc">Task Description</label>
+      <textarea id="scenarioDesc" rows="8" style="width:100%;"></textarea>
+
+      <div id="scenarioPlaceholderHint"
+           style="display:none;margin-top:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg-secondary);font-size:13px;color:var(--text2);">
+      </div>
+    </div>
+
+    <div class="modal-footer" style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;">
+      <button class="btn btn-secondary" id="btnCancelScenarioGen">Cancel</button>
+      <button class="btn btn-primary" id="btnConfirmScenarioGen">
+        Generate Response
+      </button>
+    </div>
+  </div>
+</div>
+
+
+
+
+<!-- ══════════════════════════════════════
+     ENRICHED TASK SUGGESTION MODAL
+══════════════════════════════════════ -->
+<div class="modal-overlay" id="enrichedOverlay">
+  <div class="modal" style="max-width:660px;">
+
+    <div class="modal-header">
+      <h3 class="modal-title">✨ Review &amp; Edit Before Generate</h3>
+      <button class="modal-close" id="enrichedBannerClose" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <p style="margin:0 0 14px;color:var(--text3);font-size:13px;line-height:1.5;">
+        Based on your answers, here is an enriched task description. You can edit it before generating, or use the original.
+      </p>
+
+      <label class="field-label">Original Task</label>
+      <div id="enrichedOrigText" style="
+        padding:10px 12px;border-radius:var(--radius-sm);
+        background:var(--bg-secondary);border:1px solid var(--border);
+        font-size:12.5px;color:var(--text2);line-height:1.6;
+        margin-bottom:14px;white-space:pre-wrap;
+      "></div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <label class="field-label" for="enrichedDescText" style="margin:0;">Enriched Task Description</label>
+        <button id="enrichedEditBtn" class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 10px;">&#9998; Edit</button>
+      </div>
+      <div id="enrichedDescDisplay" style="
+        padding:10px 12px;border-radius:var(--radius-sm);
+        background:var(--bg-secondary);border:1px solid var(--border);
+        font-size:13px;color:var(--text);line-height:1.6;
+        white-space:pre-wrap;min-height:80px;
+      "></div>
+      <textarea id="enrichedDescText" rows="6" style="display:none;width:100%;"></textarea>
+    </div>
+
+    <div class="modal-footer" style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <button class="btn btn-secondary" id="enrichedBannerOriginal">
+        Use original instead
+      </button>
+      <button class="btn btn-primary" id="enrichedBannerUse">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        Use this &amp; Generate
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     REGISTER TOOL MODAL
+══════════════════════════════════════ -->
+<div class="modal-overlay" id="registerToolOverlay" role="dialog" aria-modal="true" aria-labelledby="registerToolTitle">
+  <div class="te-modal" style="max-width:700px;">
+
+    <!-- Header -->
+    <div class="te-header">
+      <div class="te-header-left">
+        <div style="font-size:22px;">🛠</div>
+        <div>
+          <div class="te-header-name" id="registerToolTitle">Register New Tool</div>
+          <div class="te-header-cat">Add a new tool to the AI Tools Registry</div>
+        </div>
+      </div>
+      <div class="te-header-right">
+        <button class="te-close-btn" id="btnCloseRegisterTool" aria-label="Close">✕</button>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="te-tabs">
+      <button class="te-tab active" data-rttab="manual">✏️ Manual Input</button>
+      <button class="te-tab"        data-rttab="fileupload">📂 File Upload</button>
+    </div>
+
+    <!-- Body -->
+    <div class="te-body">
+
+      <!-- MANUAL INPUT PANEL -->
+      <div class="te-panel active" data-rtpanel="manual">
+        <div class="te-edit-body" style="padding:20px;">
+
+          <div class="te-edit-note">
+            ✏️ <strong>Manual entry</strong> — fill in the fields below and click Save Tool.
+          </div>
+          <div id="rtEditModeNote" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:8px;font-size:13px;background:#fef9c3;border:1px solid #fde047;color:#713f12;">
+            ✏️ You are editing an existing tool. Changes will update the registry.
+          </div>
+
+          <div class="te-form-grid">
+            <div>
+              <label class="te-label" for="rtToolName">Tool Name <span class="te-hint">(required)</span></label>
+              <input class="te-input" type="text" id="rtToolName" placeholder="e.g. GitHub Copilot" autocomplete="off"/>
+            </div>
+            <div>
+              <label class="te-label" for="rtCategory">Category</label>
+              <input class="te-input" type="text" id="rtCategory" placeholder="e.g. Code &amp; Dev, AI Writing"/>
+            </div>
+            <div>
+              <label class="te-label" for="rtUrl">URL / Access Link</label>
+              <input class="te-input" type="text" id="rtUrl" placeholder="https://…"/>
+            </div>
+            <div>
+              <label class="te-label" for="rtIcon">Icon <span class="te-hint">(emoji)</span></label>
+              <input class="te-input" type="text" id="rtIcon" placeholder="🤖" maxlength="8"/>
+            </div>
+            <div>
+              <label class="te-label" for="rtOutputType">Output Type</label>
+              <input class="te-input" type="text" id="rtOutputType" placeholder="e.g. code, report, email"/>
+            </div>
+          </div>
+
+          <div class="te-form-full">
+            <label class="te-label" for="rtDescription">Description</label>
+            <textarea class="te-textarea" id="rtDescription" rows="3" placeholder="What does this tool do? 1-3 sentences."></textarea>
+          </div>
+
+          <div class="te-form-grid">
+            <div>
+              <label class="te-label" for="rtBestFor">Best For <span class="te-hint">(comma-separated)</span></label>
+              <textarea class="te-textarea" id="rtBestFor" rows="2" placeholder="e.g. writing emails, summarising docs"></textarea>
+            </div>
+            <div>
+              <label class="te-label" for="rtNotFor">Not For <span class="te-hint">(comma-separated)</span></label>
+              <textarea class="te-textarea" id="rtNotFor" rows="2" placeholder="e.g. real-time data, legal advice"></textarea>
+            </div>
+            <div>
+              <label class="te-label" for="rtStrongSignals">Strong Signals <span class="te-hint">(comma-separated)</span></label>
+              <textarea class="te-textarea" id="rtStrongSignals" rows="2" placeholder="e.g. write code, debug, generate function"></textarea>
+            </div>
+            <div>
+              <label class="te-label" for="rtWeakSignals">Weak Signals <span class="te-hint">(comma-separated)</span></label>
+              <textarea class="te-textarea" id="rtWeakSignals" rows="2" placeholder="e.g. automate, productivity"></textarea>
+            </div>
+          </div>
+
+          <div class="te-form-full">
+            <label class="te-label" for="rtRoles">Target Roles <span class="te-hint">(comma-separated)</span></label>
+            <input class="te-input" type="text" id="rtRoles" placeholder="e.g. Developer, Business Analyst"/>
+          </div>
+
+          <div class="te-checkbox-row">
+            <input type="checkbox" id="rtIsInternal"/>
+            <label for="rtIsInternal">Internal tool (not publicly accessible)</label>
+          </div>
+
+          <!-- Additional Registry Columns -->
+          <div class="te-section-title" style="margin-top:20px;margin-bottom:12px;">Additional Registry Columns</div>
+          <div class="te-form-grid">
+            <div>
+              <label class="te-label" for="rtToolFamily">Tool Family</label>
+              <input class="te-input" type="text" id="rtToolFamily" data-rd-key="tool_family" placeholder="e.g. Microsoft, Google"/>
+            </div>
+            <div>
+              <label class="te-label" for="rtSpecialistLevel">Specialist Level</label>
+              <input class="te-input" type="text" id="rtSpecialistLevel" data-rd-key="specialist_level" placeholder="e.g. Beginner, Advanced"/>
+            </div>
+            <div>
+              <label class="te-label" for="rtLaunchStatus">Launch Status</label>
+              <input class="te-input" type="text" id="rtLaunchStatus" data-rd-key="launch_status" placeholder="e.g. Live, Beta, Planned"/>
+            </div>
+            <div>
+              <label class="te-label" for="rtSourceTabs">Source Tabs</label>
+              <input class="te-input" type="text" id="rtSourceTabs" data-rd-key="source_tabs" placeholder="e.g. Sheet1, Sheet2"/>
+            </div>
+            <div>
+              <label class="te-label" for="rtAllowsClientData">Allows Client Data</label>
+              <input class="te-input" type="text" id="rtAllowsClientData" data-rd-key="allows_client_data" placeholder="e.g. Yes, No, Conditional"/>
+            </div>
+            <div>
+              <label class="te-label" for="rtRequiresPrompt">Requires Prompt</label>
+              <input class="te-input" type="text" id="rtRequiresPrompt" data-rd-key="requires_prompt" placeholder="e.g. Yes, No"/>
+            </div>
+            <div>
+              <label class="te-label" for="rtIsPromptRequired">Is Prompt Required</label>
+              <input class="te-input" type="text" id="rtIsPromptRequired" data-rd-key="is_prompt_required" placeholder="e.g. Yes, No"/>
+            </div>
+            <div>
+              <label class="te-label" for="rtUrlOrNote">URL or Note</label>
+              <input class="te-input" type="text" id="rtUrlOrNote" data-rd-key="url_or_note" placeholder="Additional URL or access note"/>
+            </div>
+          </div>
+          <div class="te-form-full">
+            <label class="te-label" for="rtPrimaryJob">Primary Job</label>
+            <input class="te-input" type="text" id="rtPrimaryJob" data-rd-key="primary_job" placeholder="e.g. Code generation, Document summarisation"/>
+          </div>
+          <div class="te-form-grid">
+            <div>
+              <label class="te-label" for="rtUseWhen">Use When <span class="te-hint">(when to use this tool)</span></label>
+              <textarea class="te-textarea" id="rtUseWhen" data-rd-key="use_when" rows="2" placeholder="Describe when this tool is ideal…"></textarea>
+            </div>
+            <div>
+              <label class="te-label" for="rtAvoidWhen">Avoid When <span class="te-hint">(when not to use)</span></label>
+              <textarea class="te-textarea" id="rtAvoidWhen" data-rd-key="avoid_when" rows="2" placeholder="Describe when to avoid this tool…"></textarea>
+            </div>
+            <div>
+              <label class="te-label" for="rtTypicalInputs">Typical Inputs</label>
+              <textarea class="te-textarea" id="rtTypicalInputs" data-rd-key="typical_inputs" rows="2" placeholder="e.g. Plain text, code, documents…"></textarea>
+            </div>
+            <div>
+              <label class="te-label" for="rtTypicalOutputs">Typical Outputs</label>
+              <textarea class="te-textarea" id="rtTypicalOutputs" data-rd-key="typical_outputs" rows="2" placeholder="e.g. Code snippet, summary, report…"></textarea>
+            </div>
+          </div>
+          <div class="te-form-full">
+            <label class="te-label" for="rtPromptStrategy">Prompt Strategy</label>
+            <textarea class="te-textarea" id="rtPromptStrategy" data-rd-key="prompt_strategy" rows="2" placeholder="Recommended prompting approach…"></textarea>
+          </div>
+          <div class="te-form-full">
+            <label class="te-label" for="rtNoPromptReason">No Prompt Reason</label>
+            <textarea class="te-textarea" id="rtNoPromptReason" data-rd-key="no_prompt_reason" rows="2" placeholder="Why no prompt is needed (if applicable)…"></textarea>
+          </div>
+          <div class="te-form-full">
+            <label class="te-label" for="rtDecisionNotes">Decision Notes</label>
+            <textarea class="te-textarea" id="rtDecisionNotes" data-rd-key="decision_notes" rows="2" placeholder="Internal notes about tool selection decisions…"></textarea>
+          </div>
+          <div class="te-form-full">
+            <label class="te-label" for="rtDescContent">Desc Content <span class="te-hint">(extended description)</span></label>
+            <textarea class="te-textarea" id="rtDescContent" data-rd-key="Desc_Content" rows="3" placeholder="Extended description or content notes…"></textarea>
+          </div>
+
+          <!-- Knowledge file upload section — always at the bottom, matching Edit Tool -->
+          <div class="te-section-title" style="margin-top:18px;margin-bottom:10px;">Uploaded Knowledge Files</div>
+          <div id="rtUploadedFiles" style="margin-bottom:16px;">
+            <div style="font-size:12px;color:#9ca3af;font-style:italic;">Save the tool first to attach knowledge files.</div>
+          </div>
+          <div class="te-section-title" style="margin-top:4px;margin-bottom:12px;">Upload New Document <span class="te-hint">(PDF, DOCX, PPTX, TXT — extracts &amp; pre-fills fields)</span></div>
+          <div class="te-file-zone" id="rtFileZone">
+            <div class="te-file-zone-icon">📄</div>
+            <div class="te-file-zone-title">Drop files here or <button type="button" id="btnBrowseToolFiles" style="background:none;border:none;color:#2563EB;cursor:pointer;font-weight:700;font-family:inherit;font-size:inherit;padding:0;">browse</button></div>
+            <div class="te-file-zone-sub">PDF, DOCX, PPTX, TXT — agent will extract info and pre-fill the form fields above</div>
+          </div>
+          <div id="rtExtractStatus" style="display:none;margin-top:8px;font-size:12px;padding:10px 14px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border);"></div>
+          <div id="rtFileChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
+          <input type="file" id="rtFileInput" multiple accept=".pdf,.docx,.pptx,.txt" style="display:none"/>
+
+        </div>
+      </div>
+
+      <!-- FILE UPLOAD PANEL (Excel / bulk upload) -->
+      <div class="te-panel" data-rtpanel="fileupload" style="display:none;">
+        <div style="padding:24px 20px;">
+
+          <div class="te-edit-note" style="background:#eff6ff;border-color:#bfdbfe;color:#1e40af;">
+            📂 <strong>Bulk upload</strong> — upload an Excel file (.xlsx) to replace or extend the AI Tools Registry.
+          </div>
+
+          <div id="rtBulkDropZone" style="border:2px dashed var(--border);border-radius:12px;padding:32px 20px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;margin-top:16px;">
+            <div style="font-size:36px;margin-bottom:8px;">📊</div>
+            <div style="font-size:14px;font-weight:600;color:var(--text2);margin-bottom:4px;">Drop your Excel file here</div>
+            <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">or click to browse — .xlsx files only</div>
+            <button class="btn btn-secondary" id="btnBrowseBulkTools" type="button" style="font-size:12px;padding:6px 14px;">Browse File</button>
+            <input type="file" id="rtBulkFileInput" accept=".xlsx" style="display:none"/>
+          </div>
+
+          <div id="rtBulkFileInfo" style="display:none;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border);margin-top:12px;">
+            <span style="font-size:13px;flex:1;" id="rtBulkFileName"></span>
+            <button id="rtBulkClearBtn" style="background:none;border:none;cursor:pointer;color:#9ca3af;font-size:14px;padding:2px 4px;" title="Remove">✕</button>
+          </div>
+
+          <div style="margin-top:14px;padding:10px 14px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border);font-size:12px;color:var(--text3);line-height:1.6;">
+            Required columns: <code>tool_name</code>, <code>description</code>, <code>best_for</code>,
+            <code>not_for</code>, <code>category</code>, <code>url</code>
+          </div>
+
+          <div id="rtBulkStatus" style="display:none;margin-top:12px;padding:10px 14px;border-radius:8px;font-size:13px;"></div>
+
+        </div>
+      </div>
+
+    </div><!-- /.te-body -->
+
+    <!-- Footer -->
+    <div class="te-footer">
+      <div class="te-footer-left">
+        <button class="te-btn te-btn-secondary" id="btnCancelRegisterTool">Cancel</button>
+      </div>
+      <div class="te-footer-right" id="rtFooterRight">
+        <button class="te-btn te-btn-primary" id="btnSaveRegisterTool">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Save Tool
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     CLARIFICATION DIALOG MODAL
+══════════════════════════════════════ -->
+<div class="modal-overlay" id="clarOverlay" role="dialog" aria-modal="true" aria-labelledby="clarModalTitle">
+  <div class="modal" style="max-width:600px;">
+
+    <div class="modal-header">
+      <h3 class="modal-title" id="clarModalTitle">💬 Quick Clarification</h3>
+      <button class="modal-close" id="clarSkipBtn" title="Skip and generate anyway" aria-label="Skip">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <p style="margin:0 0 12px;color:var(--text3);font-size:13px;line-height:1.5;">
+        A bit more detail will help us recommend the right tool. Answer what you can — leave blank to skip.
+      </p>
+
+      <div id="clarBody"></div>
+    </div>
+
+    <div class="modal-footer" style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <button class="btn btn-secondary" id="clarSkipBtn2">
+        Cancel
+      </button>
+      <button class="btn btn-primary" id="clarSubmitBtn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        Submit &amp; Generate
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ JS FILES ══
+     Load order matters:
+     1. ui.js      — shared helpers (escapeHtml, showToast, goToStep, etc.)
+     2. app.js     — main app logic (uses helpers from ui.js + calls API)
+     3. promptlibrary.js — standalone prompt library
+-->
+<!-- ══════════════════════════════════════
+     ANALYTICS DASHBOARD MODAL
+══════════════════════════════════════ -->
+<div class="an-overlay" id="anOverlay"></div>
+<div class="an-modal" id="anModal">
+
+  <!-- Header -->
+  <div class="an-header">
+    <div class="an-header-left">
+      <div class="an-header-icon">📊</div>
+      <div>
+        <div class="an-header-title">Usage Analytics</div>
+        <div class="an-header-sub">Real-time usage insights across all roles &amp; sessions</div>
+      </div>
+    </div>
+    <div class="an-header-right">
+      <button class="an-close-btn" id="anCloseBtn" aria-label="Close">✕</button>
+    </div>
+  </div>
+
+  <!-- Controls Bar -->
+  <div class="an-controls">
+    <span class="an-controls-label">Period</span>
+    <div class="an-period-tabs">
+      <button class="an-period-tab active" data-period="day">Today</button>
+      <button class="an-period-tab" data-period="week">This Week</button>
+      <button class="an-period-tab" data-period="month">This Month</button>
+    </div>
+    <div class="an-divider"></div>
+    <span class="an-controls-label">Filter by Role</span>
+    <select class="an-role-select" id="anRoleSelect">
+      <option value="all">All Roles</option>
+      <option value="general">General</option>
+      <option value="Consultant">Consultant / Manager</option>
+      <option value="Executive">Executive / Director</option>
+      <option value="Developer">Developer / Technical</option>
+      <option value="Analyst">Business Analyst</option>
+      <option value="Sales">Sales / BD</option>
+      <option value="Marketing">Marketing / Comms</option>
+      <option value="HR">HR / People Ops</option>
+      <option value="Finance">Finance / Accounting</option>
+    </select>
+    <button class="an-refresh-btn" id="anRefreshBtn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      Refresh
+    </button>
+  </div>
+
+  <!-- Dashboard Body -->
+  <div class="an-body" id="anBody">
+    <!-- Populated dynamically by analytics.js -->
+    <div class="an-loading">
+      <div class="an-spinner"></div>
+      <span>Loading analytics…</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════════
+     FEEDBACK FORM MODAL
+══════════════════════════════════════ -->
+<div class="fb-overlay" id="fbOverlay"></div>
+<div class="fb-form-modal" id="fbFormModal">
+  <div class="fb-form-header">
+    <div class="fb-form-header-left">
+      <div class="fb-form-header-icon">💬</div>
+      <div>
+        <div class="fb-form-header-title">Share Your Feedback</div>
+        <div class="fb-form-header-sub">Help us improve your experience</div>
+      </div>
+    </div>
+    <button class="fb-close-btn" id="fbCloseBtn" aria-label="Close">✕</button>
+  </div>
+  <div class="fb-form-body" id="fbFormBody"></div>
+  <div class="fb-success" id="fbFormSuccess">
+    <div class="fb-success-icon">🎉</div>
+    <div class="fb-success-title">Thank you for your feedback!</div>
+    <div class="fb-success-sub">Your response has been recorded and will help us improve.</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     FEEDBACK VIEWER MODAL
+══════════════════════════════════════ -->
+<div class="fbv-overlay" id="fbvOverlay"></div>
+<div class="fbv-modal" id="fbvModal">
+
+  <div class="fbv-header">
+    <div class="fbv-header-left">
+      <div class="fbv-header-icon">📋</div>
+      <div>
+        <div class="fbv-header-title">Feedback Dashboard</div>
+        <div class="fbv-header-sub">All user feedback — ratings, comments &amp; issue types</div>
+      </div>
+    </div>
+    <div class="fbv-header-right">
+      <button class="fbv-close-btn" id="fbvCloseBtn" aria-label="Close">✕</button>
+    </div>
+  </div>
+
+  <div class="fbv-controls">
+    <span class="fbv-controls-label">Search</span>
+    <input class="fbv-search" id="fbvSearch" type="text" placeholder="Search email, comment…" />
+    <span class="fbv-controls-label">Rating</span>
+    <select class="fbv-rating-filter" id="fbvRatingFilter">
+      <option value="0">All Ratings</option>
+      <option value="5">5 ★ Excellent</option>
+      <option value="4">4 ★ Very Good</option>
+      <option value="3">3 ★ Good</option>
+      <option value="2">2 ★ Fair</option>
+      <option value="1">1 ★ Poor</option>
+    </select>
+    <button class="fbv-refresh-btn" id="fbvRefreshBtn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      Refresh
+    </button>
+  </div>
+
+  <div class="fbv-body" id="fbvBody">
+    <div class="fbv-loading">
+      <div class="fbv-spinner"></div>
+      <span>Loading feedbacks…</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════════
+     TOOL CHANGE LOG MODAL
+══════════════════════════════════════ -->
+<div class="tcl-overlay" id="tclOverlay"></div>
+<div class="tcl-modal" id="tclModal">
+
+  <div class="tcl-header">
+    <div class="tcl-header-left">
+      <div class="tcl-header-icon">🔧</div>
+      <div>
+        <div class="tcl-header-title">Tool Change Log</div>
+        <div class="tcl-header-sub">All tool registrations, edits, and deletions</div>
+      </div>
+    </div>
+    <div class="tcl-header-right">
+      <button class="tcl-close-btn" id="tclCloseBtn" aria-label="Close">✕</button>
+    </div>
+  </div>
+
+  <div class="tcl-controls">
+    <span class="tcl-controls-label">Search tool</span>
+    <input class="tcl-search" id="tclSearch" type="text" placeholder="Filter by tool name…" />
+    <button class="tcl-refresh-btn" id="tclRefreshBtn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      Refresh
+    </button>
+  </div>
+
+  <div class="tcl-body" id="tclBody">
+    <div class="tcl-loading">
+      <div class="tcl-spinner"></div>
+      <span>Loading change log…</span>
+    </div>
+  </div>
+
+  <div class="tcl-footer" id="tclFooter" style="display:none;">
+    <button class="tcl-page-btn" id="tclPrevBtn">← Prev</button>
+    <span class="tcl-page-info" id="tclPageInfo"></span>
+    <button class="tcl-page-btn" id="tclNextBtn">Next →</button>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════════
+     TOOL EDITOR MODAL
+══════════════════════════════════════ -->
+<div class="te-overlay" id="teOverlay"></div>
+<div class="te-modal" id="teModal">
+
+  <div class="te-header">
+    <div class="te-header-left">
+      <div class="te-header-icon" id="teHeaderIcon">🤖</div>
+      <div>
+        <div class="te-header-name" id="teHeaderName">Tool</div>
+        <div class="te-header-cat"  id="teHeaderCat"></div>
+      </div>
+    </div>
+    <div class="te-header-right">
+      <span class="te-header-badge" id="teHeaderBadge" style="display:none;align-items:center;"></span>
+      <button class="te-close-btn" id="teCloseBtn" aria-label="Close">✕</button>
+    </div>
+  </div>
+
+  <div class="te-tabs">
+    <button class="te-tab active" data-tab="view">📋 View Details</button>
+    <button class="te-tab"        data-tab="edit">✏️ Edit Tool</button>
+  </div>
+
+  <div class="te-body">
+
+    <!-- VIEW PANEL -->
+    <div class="te-panel active" data-panel="view" id="teViewPanel">
+      <div style="padding:40px;text-align:center;color:#6b7280;font-size:13px;">Loading…</div>
+    </div>
+
+    <!-- EDIT PANEL — content is rendered dynamically by tool_editor.js _populateEditForm() -->
+    <div class="te-panel" data-panel="edit" id="teEditPanel">
+      <div class="te-edit-body"></div>
+    </div>
+
+  </div>
+
+  <div class="te-footer">
+    <div class="te-footer-left">
+      <button class="te-btn te-btn-danger" id="teDeleteBtn">🗑 Delete Tool</button>
+    </div>
+    <div class="te-footer-right">
+      <button class="te-btn te-btn-secondary" id="teCancelBtn">Cancel</button>
+      <button class="te-btn te-btn-primary"   id="teSaveBtn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Save Changes
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<script src="/static/js/ui.js"></script>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/scenario_library.js"></script>
+<script src="/static/js/file_upload.js"></script>
+<script src="/static/js/analytics.js"></script>
+<script src="/static/js/feedback.js"></script>
+<script src="/static/js/tool_editor.js"></script>
+<script src="/static/js/admin_scenarios.js"></script>
+<script src="/static/js/auth.js"></script>
+
+</div><!-- /#appShell -->
+</body>
+</html>

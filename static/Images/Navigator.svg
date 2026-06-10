@@ -1,0 +1,51 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>AI Compass Icon</title>
+  <defs>
+    <linearGradient id="ringGradient" x1="116" y1="120" x2="425" y2="402" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#062A5B"/>
+      <stop offset="0.55" stop-color="#0B3D91"/>
+      <stop offset="1" stop-color="#0067E6"/>
+    </linearGradient>
+    <linearGradient id="needleGradient" x1="185" y1="331" x2="367" y2="173" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#062A5B"/>
+      <stop offset="0.55" stop-color="#0B3D91"/>
+      <stop offset="1" stop-color="#1268F3"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Compass outer ring with four clean gaps -->
+  <path d="M256 61
+           A195 195 0 0 1 374.4 101.1"
+        stroke="url(#ringGradient)" stroke-width="16" stroke-linecap="butt"/>
+  <path d="M418.3 144.8
+           A195 195 0 0 1 451 256"
+        stroke="url(#ringGradient)" stroke-width="16" stroke-linecap="butt"/>
+  <path d="M451 256
+           A195 195 0 0 1 256 451"
+        stroke="url(#ringGradient)" stroke-width="16" stroke-linecap="butt"/>
+  <path d="M256 451
+           A195 195 0 0 1 61 256"
+        stroke="#062A5B" stroke-width="16" stroke-linecap="butt"/>
+  <path d="M61 256
+           A195 195 0 0 1 256 61"
+        stroke="#062A5B" stroke-width="16" stroke-linecap="butt"/>
+
+  <!-- Compass ticks -->
+  <path d="M252 61H260V101H252V61Z" fill="#062A5B"/>
+  <path d="M252 411H260V451H252V411Z" fill="#062A5B"/>
+  <path d="M61 252H101V260H61V252Z" fill="#062A5B"/>
+  <path d="M411 252H451V260H411V252Z" fill="#062A5B"/>
+
+  <!-- Needle: clean NE/SW pointer -->
+  <path d="M153 365L239 236L374 147L285 282L153 365Z" fill="url(#needleGradient)"/>
+  <path d="M153 365L239 236L256 256L153 365Z" fill="#062A5B"/>
+  <path d="M374 147L285 282L256 256L374 147Z" fill="#1268F3"/>
+
+  <!-- Center hub -->
+  <circle cx="256" cy="256" r="33" fill="white"/>
+  <circle cx="256" cy="256" r="24" fill="#062A5B"/>
+  <circle cx="256" cy="256" r="19" fill="#062A5B"/>
+
+  <!-- AI text target -->
+  <text x="365" y="143" font-family="Arial, Helvetica, sans-serif" font-size="56" font-weight="700" fill="#1268F3">AI</text>
+</svg>

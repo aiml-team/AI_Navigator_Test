@@ -1,0 +1,23 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+pydantic-settings==2.6.1
+python-dotenv==1.0.1
+openai==1.58.1
+httpx==0.28.0
+jinja2==3.1.3
+python-multipart==0.0.6
+pyodbc
+chromadb
+langgraph
+pypdf
+python-docx
+pdfplumber
+openpyxl
+tavily-python
+pandas
+azure-storage-blob
+# ── OKTA-DISABLED ─ Okta SAML SSO deps (uncomment to re-enable) ─
+# python3-saml==1.16.0
+# itsdangerous==2.2.0
+redis==5.2.1

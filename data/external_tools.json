@@ -1,0 +1,12 @@
+{
+  "tools": [
+    { "name": "ChatGPT",           "url": "https://chat.openai.com" },
+    { "name": "Microsoft Copilot", "url": "https://copilot.microsoft.com" },
+    { "name": "Cassidy",           "url": "https://www.cassidy.ai" },
+    { "name": "Clay",              "url": "https://www.clay.com" },
+    { "name": "Hubspot",           "url": "https://www.hubspot.com" },
+    { "name": "Jasper",            "url": "https://www.jasper.ai" },
+    { "name": "Synthesia",         "url": "https://www.synthesia.io" },
+    { "name": "Icertis",           "url": "https://www.icertis.com" }
+  ]
+}

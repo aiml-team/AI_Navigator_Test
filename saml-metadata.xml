@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<md:EntityDescriptor
+    xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata"
+    xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+    entityID="https://ai-navigator-test-cbeedsgsd8hyfefq.northeurope-01.azurewebsites.net/saml/metadata">
+  <md:SPSSODescriptor
+      AuthnRequestsSigned="false"
+      WantAssertionsSigned="true"
+      protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
+    <md:KeyDescriptor use="signing">
+      <ds:KeyInfo>
+        <ds:X509Data>
+          <ds:X509Certificate>MIICujCCAaKgAwIBAgIUAZzKptOXx4G17WEXRQkjvGCjoJowDQYJKoZIhvcNAQELBQAwFzEVMBMGA1UEAwwMYWktbmF2aWdhdG9yMB4XDTI2MDQwMTE1Mzg1MFoXDTM2MDMyOTE1Mzg1MFowFzEVMBMGA1UEAwwMYWktbmF2aWdhdG9yMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAw3GA4Zn5bZqMRLYpc5Vp1UqnsTjdAfL788q7hkLf8gc9ZDvDmoGxHiv4gziBJ+Rx2tV9W0gm+dI7uUSrL+eNr5XXPKuMsrWtucYcnsjusts8EP59uoFksUF8m0dtqaH7FluCOMeU3gGno5DdUU3NjIL4tT94psvb+pItZFvEi+9FTx3yoSjIMBA2CNMK1rBdv4NpExT+6qQDDTG0O2JYKG91mK39wlegi34riWKX4q5VxtRZVlwKykqqxIa82TglSw9G/z9T+EPLox+mdUV+JTWVuUJbTZahfW1FzoImcgqj6BiSiuBzbBU4oFakpvsnkRUI1wTYybnyETk1iJyLVQIDAQABMA0GCSqGSIb3DQEBCwUAA4IBAQCTfYucSy8ACjZohKFg6GAgxOLn97NU1hMPz8AFLlLCL9uM9A8u1FgnDbJkrNlu5rWwGAte090wdVYaEgevliPFBuwFE+iWOgfFAtcjBGW1ObIT2IZi2AcZHK5+1ZPu+wno6BWt0Q1lOEDWy/Cq3v1u1HfD1xa8IDVlErCmrMsjsHzwyKeQK2X04q6vUEjp9j9FoCS/WxIZyWiRU9I6vy96tvFY5NZSQt0jBtF3Wv6/fHmd7Rp+0L2XW8S2B7czhy24NwO2Ls0QAHNGDBS53GviCo96mfe98MBP+7u897NBXeMkZFi0in7aA6zppiky4HwfOkavPXS3+WE89EM9zpkB</ds:X509Certificate>
+        </ds:X509Data>
+      </ds:KeyInfo>
+    </md:KeyDescriptor>
+    <md:NameIDFormat>urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress</md:NameIDFormat>
+    <md:AssertionConsumerService
+        Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
+        Location="https://ai-navigator-test-cbeedsgsd8hyfefq.northeurope-01.azurewebsites.net/saml/acs"
+        index="1"/>
+  </md:SPSSODescriptor>
+</md:EntityDescriptor>
