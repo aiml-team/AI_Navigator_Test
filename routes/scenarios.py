@@ -18,14 +18,36 @@ async def get_scenarios():
 @router.post("/api/scenarios/register")
 async def register_scenario(req: RegisterScenarioRequest):
     new_scenario = {
-        "mega_group":     req.mega_group.strip(),
-        "category":       req.category.strip() if req.category else "",
-        "title":          req.title.strip(),
-        "persona":        req.persona.strip() if req.persona else "",
-        "activate_phase": req.activate_phase.strip() if req.activate_phase else "",
-        "scenario":       req.scenario.strip(),
+        "mega_group": req.mega_group.strip(),
+        "category":   req.category.strip() if req.category else "",
+        "phase":      req.activate_phase.strip() if req.activate_phase else "",
+        "title":      req.title.strip(),
+        "persona":    req.persona.strip() if req.persona else "",
+        "scenario":   req.scenario.strip(),
+        "task_type":  "",
     }
     SCENARIO_LIBRARY.append(new_scenario)
+
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO scenarios (id, mega_group, category, phase, title, persona, scenario, task_type, source, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (
+            str(uuid.uuid4()),
+            new_scenario["mega_group"],
+            new_scenario["category"],
+            new_scenario["phase"],
+            new_scenario["title"],
+            new_scenario["persona"],
+            new_scenario["scenario"],
+            new_scenario["task_type"],
+            "manual",
+            datetime.utcnow().isoformat(),
+        ),
+    )
+    conn.commit()
+    conn.close()
+
     return {"status": "ok", "scenarios_loaded": len(SCENARIO_LIBRARY)}
 
 
@@ -138,14 +160,37 @@ async def approve_scenario_suggestion(suggestion_id: str, admin_note: str = ""):
     conn.commit()
     conn.close()
 
-    SCENARIO_LIBRARY.append({
-        "mega_group":     row["mega_group"],
-        "category":       row["category"],
-        "title":          row["title"],
-        "persona":        row["persona"],
-        "activate_phase": row["activate_phase"],
-        "scenario":       row["scenario"],
-    })
+    approved_scenario = {
+        "mega_group": row["mega_group"] or "",
+        "category":   row["category"]   or "",
+        "phase":      row["activate_phase"] or "",
+        "title":      row["title"]       or "",
+        "persona":    row["persona"]     or "",
+        "scenario":   row["scenario"]    or "",
+        "task_type":  "",
+    }
+    SCENARIO_LIBRARY.append(approved_scenario)
+
+    conn2 = get_db()
+    conn2.execute(
+        "INSERT INTO scenarios (id, mega_group, category, phase, title, persona, scenario, task_type, source, created_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (
+            str(uuid.uuid4()),
+            approved_scenario["mega_group"],
+            approved_scenario["category"],
+            approved_scenario["phase"],
+            approved_scenario["title"],
+            approved_scenario["persona"],
+            approved_scenario["scenario"],
+            approved_scenario["task_type"],
+            "approved_suggestion",
+            datetime.utcnow().isoformat(),
+        ),
+    )
+    conn2.commit()
+    conn2.close()
+
     return {"status": "ok", "scenarios_loaded": len(SCENARIO_LIBRARY)}
 
 

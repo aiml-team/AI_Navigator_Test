@@ -31,6 +31,7 @@ class OrchestratorState(TypedDict):
     llm_output: str
     token_estimate: int
     error: Optional[str]
+    skip_tool_recommendation: bool
 
 
 # ── Request / Response Models ─────────────────────────────────────────────────
@@ -40,6 +41,7 @@ class RunRequest(BaseModel):
     task_type: Optional[str] = "general"
     data_sensitivity: Optional[str] = "general"
     user_email: Optional[str] = ""
+    skip_tool_recommendation: Optional[bool] = False
 
 
 class FeedbackRequest(BaseModel):

@@ -5,7 +5,7 @@ from typing import List
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from schemas import RegisterToolRequest
-from services.registry import AI_TOOLS_REGISTRY, _merge_db_tools_into_registry, reload_tools_registry
+from services.registry import AI_TOOLS_REGISTRY, _merge_db_tools_into_registry, reload_tools_registry, _save_excel_tools_to_db
 from services.database import get_db, log_tool_change
 from services import cache
 from services.chromadb_store import (
@@ -25,7 +25,8 @@ def _registry_snapshot() -> dict:
     return {
         name: {
             "description":    info.get("description") or "",
-            "desc_content":   (info.get("raw_data") or {}).get("Desc_Content", ""),
+            "desc_content":        (info.get("raw_data") or {}).get("Desc_Content", ""),
+            "hover_description":   (info.get("raw_data") or {}).get("hover_description", ""),
             "category":       info.get("category", ""),
             "icon":           info.get("icon", ""),
             "best_for":       info.get("best_for") or [],
@@ -415,6 +416,40 @@ async def tool_docs_status():
     return {"status": get_tool_knowledge_status()}
 
 
+@router.get("/api/tools/db-status")
+async def tools_db_status():
+    """Diagnostic: shows in-memory registry vs Azure SQL DB counts."""
+    result = {
+        "in_memory": len(AI_TOOLS_REGISTRY),
+        "db_excel_count": -1,
+        "db_manual_count": -1,
+        "db_total": -1,
+        "db_error": None,
+        "columns": [],
+    }
+    try:
+        from services.database import get_db
+        conn = get_db()
+        row = conn.execute("SELECT COUNT(*) AS c FROM registered_tools").fetchone()
+        result["db_total"] = int(row.get("c") or 0) if row else 0
+        try:
+            row2 = conn.execute("SELECT COUNT(*) AS c FROM registered_tools WHERE source = 'excel'").fetchone()
+            result["db_excel_count"] = int(row2.get("c") or 0) if row2 else 0
+            row3 = conn.execute("SELECT COUNT(*) AS c FROM registered_tools WHERE source = 'manual'").fetchone()
+            result["db_manual_count"] = int(row3.get("c") or 0) if row3 else 0
+        except Exception as col_e:
+            result["db_error"] = f"source column missing: {col_e}"
+        # Report which columns exist
+        cols = conn.execute(
+            "SELECT name FROM sys.columns WHERE object_id = OBJECT_ID(N'registered_tools') ORDER BY column_id"
+        ).fetchall()
+        result["columns"] = [c["name"] for c in cols]
+        conn.close()
+    except Exception as e:
+        result["db_error"] = str(e)
+    return result
+
+
 @router.delete("/api/tool-docs/clear")
 async def clear_tool_docs():
     try:
@@ -463,4 +498,18 @@ async def upload_tools_registry(file: UploadFile = File(...)):
     # Explicitly clear the registered list so all processes see the new snapshot immediately.
     cache.invalidate_registered_list()
 
-    return {"status": "ok", "tools_loaded": len(AI_TOOLS_REGISTRY)}
+    # Verify DB save and return the count so the caller can see what was persisted.
+    try:
+        from services.database import get_db
+        conn = get_db()
+        row = conn.execute("SELECT COUNT(*) AS c FROM registered_tools WHERE source = 'excel'").fetchone()
+        conn.close()
+        db_count = int(row.get("c") or 0) if row else 0
+    except Exception:
+        db_count = -1  # DB check failed
+
+    return {
+        "status": "ok",
+        "tools_loaded": len(AI_TOOLS_REGISTRY),
+        "tools_saved_to_db": db_count,
+    }

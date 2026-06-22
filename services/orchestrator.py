@@ -74,10 +74,13 @@ Request: "{state['user_input']}"
 *[Demo Mode — configure AZURE_OPENAI_* env vars to enable live responses]*"""
 
 
-def _skip_if_blocked(state: OrchestratorState) -> str:
+def _route_after_policy(state: OrchestratorState) -> str:
+    """Three-way route: blocked → end, skip_tool_rec → prompt directly, else → agents."""
     if state.get("policy_blocked", False):
         return "blocked"
-    return "allowed"
+    if state.get("skip_tool_recommendation", False):
+        return "skip_tools"
+    return "recommend"
 
 
 def _noop_blocked(state: OrchestratorState) -> OrchestratorState:
@@ -115,8 +118,12 @@ graph.add_edge("retrieve_policies", "check_policy_compliance")
 
 graph.add_conditional_edges(
     "check_policy_compliance",
-    _skip_if_blocked,
-    {"blocked": "blocked_end", "allowed": "run_agents_and_decide"},
+    _route_after_policy,
+    {
+        "blocked":    "blocked_end",
+        "skip_tools": "build_corlo_prompt",   # skips agent calls — saves tokens
+        "recommend":  "run_agents_and_decide",
+    },
 )
 
 graph.add_edge("blocked_end",           END)

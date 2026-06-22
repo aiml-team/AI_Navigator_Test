@@ -25,6 +25,7 @@
   // Map<toolName, boolean>  = loaded (false = no access)
   let _prefsCache = null;
   let _prefsLoaded = false;
+  let _prefsPromise = Promise.resolve();   // resolves once prefs are loaded (or fail)
 
   /* ── All tools from the last API load ─────────────────────────── */
   let _allTools = [];   // [{tool_name, has_access, icon, category, description, url}]
@@ -245,7 +246,7 @@
     return sel.value;
   }
 
-  /* ── Save ─────────────────────────────────────────────────────── */
+/* ── Save ─────────────────────────────────────────────────────── */
   async function _save() {
     const email = _getEmail();
     if (!email) {
@@ -299,9 +300,8 @@
       const note = _el('pzSaveNote');
       if (note) {
         note.style.color = '#10b981';
-        note.textContent = `Saved — ${accessCount} tool${accessCount !== 1 ? 's' : ''} accessible. ${roleLabel}`;
+        note.textContent = `✓ Saved — ${accessCount} tool${accessCount !== 1 ? 's' : ''} accessible. ${roleLabel}`;
       }
-      setTimeout(closeModal, 1400);
     } catch (e) {
       const note = _el('pzSaveNote');
       if (note) { note.style.color = '#ef4444'; note.textContent = 'Save failed. Please try again.'; }
@@ -320,9 +320,8 @@
     });
 
     // Close
-    _el('pzCloseBtn')?.addEventListener('click',  closeModal);
-    _el('pzCancelBtn')?.addEventListener('click', closeModal);
-    _el('pzOverlay')?.addEventListener('click',   closeModal);
+    _el('pzCloseBtn')?.addEventListener('click', closeModal);
+    _el('pzOverlay')?.addEventListener('click',  closeModal);
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
     // Tabs
@@ -369,7 +368,7 @@
       try { return JSON.parse(sessionStorage.getItem('navigator_session')); } catch { return null; }
     })();
     if (session && session.email) {
-      Promise.all([loadPrefs(), loadDefaultRole()]);
+      _prefsPromise = Promise.all([loadPrefs(), loadDefaultRole()]).catch(() => {});
     }
   }
 
@@ -386,6 +385,7 @@
     hasToolAccess,
     getDefaultRole,
     openModal,
+    waitForPrefs: () => _prefsPromise,
   };
 
 })();

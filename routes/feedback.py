@@ -1,6 +1,8 @@
+import asyncio
 import csv
 import io
 import json
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
@@ -9,6 +11,154 @@ from typing import List
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from services.database import get_db
+from services.llm_client import call_llm
+
+_log = logging.getLogger("routes.feedback")
+
+
+# ── LLM triage helpers ─────────────────────────────────────────
+
+def _title_similarity(a: str, b: str) -> float:
+    """Jaccard similarity on meaningful words (ignores stop words)."""
+    _stop = {"a","an","the","is","not","and","or","in","on","to","of",
+             "with","for","it","i","my","we","our","this","that","was","are"}
+    words_a = {w for w in a.lower().split() if w not in _stop}
+    words_b = {w for w in b.lower().split() if w not in _stop}
+    if not words_a or not words_b:
+        return 0.0
+    union = words_a | words_b
+    return len(words_a & words_b) / len(union)
+
+
+def _triage_feedback_sync(feedback_id: str, comment: str, issue_type: str, email: str, force_new: bool = False) -> dict:
+    """
+    Classify the feedback with the LLM, then check for duplicate open issues.
+    Creates / updates a row in technical_feedbacks and returns a triage dict.
+    Pass force_new=True to skip duplicate detection and always create a fresh issue.
+    """
+    text = f"Feedback type: {issue_type or 'not specified'}\nUser comment: {comment or '(no comment)'}"
+
+    system = (
+        "You are a technical support classifier for an enterprise AI web application called AI Navigator.\n"
+        "The app has distinct feature areas: chat (Generate button, chat panel, Continue Conversation), "
+        "ai_tools (AI Tools page, Open button, tool cards), personalization (Personalization modal, "
+        "Save Preferences button, AI Tools tab, General tab), feedback (Feedback form, submit button), "
+        "scenario_library (Scenario Library page), admin (Admin panel, Tech Issues, Feedback Inbox, "
+        "Analytics), auth (Login, Sign in), home (Home page, recent runs).\n\n"
+        "Decide whether the feedback describes a TECHNICAL problem: broken feature, button not working, "
+        "error message, crash, data not loading, wrong display, slow performance, access issue.\n"
+        "General complaints about AI output quality or content are NOT technical issues.\n\n"
+        "Rules for the title field:\n"
+        "  - ALWAYS start with the feature_area label in brackets, e.g. [Personalization] or [Chat]\n"
+        "  - Include the EXACT button label or UI component the user mentioned\n"
+        "  - 'Save Preferences button' and 'Generate button' are DIFFERENT problems even if both say "
+        "'button not working' — they are in different feature areas\n"
+        "  - Never generalise to just 'button not working' — be specific\n\n"
+        "Return ONLY valid JSON — no markdown, no extra text. Examples:\n"
+        '{"is_technical":true,"title":"[Personalization] Save Preferences button unresponsive","category":"UI","feature_area":"personalization"}\n'
+        '{"is_technical":true,"title":"[Chat] Generate button not responding","category":"UI","feature_area":"chat"}\n'
+        '{"is_technical":true,"title":"[AI Tools] Open button missing for ChatGPT","category":"UI","feature_area":"ai_tools"}\n'
+        '{"is_technical":false}\n\n'
+        "Categories: UI | API | Performance | Data | Authentication | Output Quality | Other\n"
+        "Feature areas: chat | ai_tools | personalization | feedback | scenario_library | admin | auth | home | general"
+    )
+
+    try:
+        raw = call_llm(system, text, max_tokens=160, temperature=0.05)
+        raw = raw.replace("```json", "").replace("```", "").strip()
+        classified = json.loads(raw)
+    except Exception as e:
+        _log.warning("[triage] LLM classify failed: %s", e)
+        return {"is_technical": False}
+
+    if not classified.get("is_technical"):
+        return {"is_technical": False}
+
+    title        = (classified.get("title")        or "Technical issue").strip()[:500]
+    category     = (classified.get("category")     or "Other").strip()[:100]
+    feature_area = (classified.get("feature_area") or "general").strip()[:100]
+    now          = datetime.utcnow().isoformat()
+
+    try:
+        db = get_db()
+
+        # Duplicate detection — skipped when the user explicitly said it's a different problem.
+        if not force_new:
+            open_issues = db.execute(
+                "SELECT id, problem_title, category, feature_area, status, affected_count, reporter_emails "
+                "FROM technical_feedbacks WHERE status != 'completed'"
+            ).fetchall()
+
+            matched = None
+            for issue in open_issues:
+                issue_area = (issue["feature_area"] or "").strip().lower()
+                # Issues in different feature areas are NEVER duplicates — a broken Save button
+                # in Personalization and a broken Generate button in Chat are separate problems.
+                if issue_area and feature_area.lower() != issue_area:
+                    continue
+                sim      = _title_similarity(title, issue["problem_title"] or "")
+                same_cat = (category.lower() == (issue["category"] or "").lower())
+                if sim > 0.35 or (same_cat and sim > 0.20):
+                    matched = issue
+                    break
+
+            if matched:
+                issue_id = matched["id"]
+                existing_status = matched["status"] or "pending"
+                try:
+                    emails = json.loads(matched["reporter_emails"] or "[]")
+                except Exception:
+                    emails = []
+                if email and email not in emails:
+                    emails.append(email)
+                db.execute(
+                    "UPDATE technical_feedbacks "
+                    "SET affected_count = affected_count + 1, last_reported = ?, "
+                    "reporter_emails = ?, updated_at = ? WHERE id = ?",
+                    (now, json.dumps(emails), now, issue_id),
+                )
+                db.commit()
+                db.close()
+                return {
+                    "is_technical":  True,
+                    "title":         matched["problem_title"],
+                    "category":      category,
+                    "feature_area":  feature_area,
+                    "status":        existing_status,
+                    "is_known":      True,
+                    "tech_id":       issue_id,
+                }
+
+        # New issue (either no duplicate found, or user confirmed it's a different problem)
+        tech_id         = str(uuid.uuid4())
+        reporter_emails = json.dumps([email] if email else [])
+        db.execute(
+            "INSERT INTO technical_feedbacks "
+            "(id, feedback_id, problem_title, problem_desc, category, feature_area, status, "
+            "affected_count, reporter_emails, first_reported, last_reported, "
+            "resolved_at, admin_note, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                tech_id, feedback_id, title, comment or "", category, feature_area, "pending",
+                1, reporter_emails, now, now, "", "", now, now,
+            ),
+        )
+        db.commit()
+        db.close()
+        return {
+            "is_technical": True,
+            "title":        title,
+            "category":     category,
+            "feature_area": feature_area,
+            "status":       "pending",
+            "is_known":     False,
+            "tech_id":      tech_id,
+        }
+
+    except Exception as e:
+        _log.warning("[triage] DB step failed: %s", e)
+        return {"is_technical": True, "title": title, "category": category,
+                "feature_area": feature_area, "status": "pending", "is_known": False}
 
 router = APIRouter()
 
@@ -41,6 +191,7 @@ async def submit_feedback(
     issue_type: str  = Form(""),
     audit_id:   str  = Form(""),
     source:     str  = Form("form"),
+    force_new:  str  = Form(""),   # "true" → skip duplicate detection, always create fresh issue
     files:      List[UploadFile] = File(default=[]),
 ):
     created_at = datetime.utcnow().isoformat()
@@ -146,7 +297,34 @@ async def submit_feedback(
     except Exception as e:
         print(f"[feedback] Azure SQL upsert warning: {e}")
 
-    return {"status": "ok", "feedback_id": feedback_id}
+    # ── LLM triage (non-blocking — runs in thread pool so it doesn't slow the response) ──
+    triage: dict = {"is_technical": False}
+    if (comment or issue_type) and not is_update:
+        try:
+            triage = await asyncio.to_thread(
+                _triage_feedback_sync, feedback_id, comment, issue_type, email or "",
+                force_new.strip().lower() == "true"
+            )
+        except Exception as e:
+            _log.warning("[triage] async wrapper failed: %s", e)
+
+    # ── If technical, mark the blob so it's excluded from the Feedback Inbox ──
+    if triage.get("is_technical") and not is_update:
+        try:
+            container = _get_blob_container()
+            meta_blob_name = f"{folder}/metadata.json"
+            meta_data = json.loads(container.download_blob(meta_blob_name).readall())
+            meta_data["is_technical"] = True
+            container.upload_blob(
+                name=meta_blob_name,
+                data=json.dumps(meta_data, indent=2).encode("utf-8"),
+                overwrite=True,
+                content_settings=_content_settings("application/json"),
+            )
+        except Exception as e:
+            _log.warning("[feedback] Could not mark blob as technical: %s", e)
+
+    return {"status": "ok", "feedback_id": feedback_id, "triage": triage}
 
 
 @router.get("/api/feedback/by-audit/{audit_id}")
@@ -197,6 +375,27 @@ def _load_filtered_feedbacks(
             continue
 
     all_feedbacks.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+
+    # Exclude technical feedbacks — those belong in Tech Issues only, not the Feedback Inbox.
+    # Two checks:
+    #   1. Blob flag  — set at submission time for new technical feedbacks (post-fix)
+    #   2. SQL lookup — catches historical feedbacks submitted before the flag existed,
+    #                   by matching against feedback_id stored in technical_feedbacks
+    tech_feedback_ids: set = set()
+    try:
+        db = get_db()
+        rows = db.execute(
+            "SELECT feedback_id FROM technical_feedbacks WHERE feedback_id != ''"
+        ).fetchall()
+        db.close()
+        tech_feedback_ids = {r["feedback_id"] for r in rows}
+    except Exception:
+        pass
+
+    all_feedbacks = [
+        f for f in all_feedbacks
+        if not f.get("is_technical") and f.get("id") not in tech_feedback_ids
+    ]
 
     filtered = all_feedbacks
     if rating and rating > 0:

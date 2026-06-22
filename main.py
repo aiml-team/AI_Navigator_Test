@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -17,12 +18,44 @@ from services.database import init_db
 from auth import init_navigator_tables
 from routes import router
 
+_log = logging.getLogger("main")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
-    init_navigator_tables()
+    try:
+        init_db()
+    except Exception as exc:
+        _log.warning("[startup] init_db failed — app will start without DB tables: %s", exc)
+    try:
+        init_navigator_tables()
+    except Exception as exc:
+        _log.warning("[startup] init_navigator_tables failed: %s", exc)
+
+    # Persist in-memory AI Tools registry to Azure SQL if not already there.
+    # This runs AFTER init_db() so the registered_tools table and source column
+    # are guaranteed to exist. Handles first boot, code updates, and Redis expiry.
+    try:
+        from services.registry import AI_TOOLS_REGISTRY, _save_excel_tools_to_db
+        from services.database import get_db
+        if AI_TOOLS_REGISTRY:
+            conn = get_db()
+            row = conn.execute(
+                "SELECT COUNT(*) AS c FROM registered_tools WHERE source = 'excel'"
+            ).fetchone()
+            conn.close()
+            if row and int(row.get("c") or 0) == 0:
+                # DB has no Excel-sourced tools — persist the in-memory ones now
+                excel_tools = {
+                    name: info for name, info in AI_TOOLS_REGISTRY.items()
+                    if info.get("_source") != "db"
+                }
+                if excel_tools:
+                    saved = _save_excel_tools_to_db(excel_tools)
+                    _log.info("[startup] Migrated %d tools from memory to Azure SQL", saved)
+    except Exception as exc:
+        _log.warning("[startup] Could not persist registry to Azure SQL: %s", exc)
+
     yield
 
 

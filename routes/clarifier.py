@@ -98,8 +98,18 @@ async def chat_gather(req: ChatGatherRequest):
     # Use default_role as the fallback role for parsing the [SATISFIED] block
     fallback_role = default_role or req.role or "general"
 
+    def _parse_partial_block(text: str) -> list:
+        questions = []
+        for line in text.replace("[PARTIAL]", "").strip().splitlines():
+            stripped = line.strip()
+            if stripped.startswith("- ") or stripped.startswith("• "):
+                q = stripped.lstrip("-•").strip()
+                if q:
+                    questions.append(q)
+        return questions
+
     try:
-        raw = call_llm_messages(messages, max_tokens=400, temperature=0.2)
+        raw = call_llm_messages(messages, max_tokens=500, temperature=0.2)
         raw = (raw or "").strip()
 
         if not raw:
@@ -107,29 +117,65 @@ async def chat_gather(req: ChatGatherRequest):
 
         if "[SATISFIED]" in raw:
             parsed = _parse_satisfied_block(raw, fallback_role, req.user_input or "")
+
+            # Detect if SATISFIED was triggered by a skip/proceed command
+            # while questions were still pending → flag as partial_info
+            _SKIP_PHRASES = [
+                "skip", "proceed", "generate", "don't have", "dont have",
+                "no answer", "i don't know", "not sure", "just proceed",
+                "move on", "go ahead", "don't know",
+            ]
+            user_msgs  = [m for m in req.messages if m.role == "user"]
+            last_user  = (user_msgs[-1].content if user_msgs else "").lower()
+            was_skip   = any(p in last_user for p in _SKIP_PHRASES)
+            agent_msgs = [m for m in req.messages if m.role in ("agent", "assistant", "bot")]
+            had_questions = any(
+                ("1." in m.content and len(m.content) > 40) or
+                "to help you better" in m.content.lower() or
+                "i have a few questions" in m.content.lower() or
+                "few questions:" in m.content.lower()
+                for m in agent_msgs
+            )
+            partial_info = was_skip and had_questions
+
             return {
-                "action":           "ready",
-                "role":             parsed["role"],
-                "task_type":        parsed["task_type"],
-                "task_description": parsed["task_description"],
-                "message":          None,
+                "action":               "ready",
+                "role":                 parsed["role"],
+                "task_type":            parsed["task_type"],
+                "task_description":     parsed["task_description"],
+                "message":              None,
+                "unanswered_questions": [],
+                "partial_info":         partial_info,
+            }
+
+        if "[PARTIAL]" in raw:
+            unanswered = _parse_partial_block(raw)
+            return {
+                "action":               "partial",
+                "message":              None,
+                "unanswered_questions": unanswered,
+                "role":                 None,
+                "task_type":            None,
+                "task_description":     None,
             }
 
         return {
-            "action":           "question",
-            "message":          raw,
-            "role":             None,
-            "task_type":        None,
-            "task_description": None,
+            "action":               "question",
+            "message":              raw,
+            "role":                 None,
+            "task_type":            None,
+            "task_description":     None,
+            "unanswered_questions": [],
         }
     except Exception as e:
         logging.getLogger("routes.clarifier").error("Clarifier Agent error: %s", e, exc_info=True)
         return {
-            "action":           "question",
-            "message":          "I'm here to help! Could you describe what you'd like to accomplish today?",
-            "role":             None,
-            "task_type":        None,
-            "task_description": None,
+            "action":               "question",
+            "message":              "I'm here to help! Could you describe what you'd like to accomplish today?",
+            "role":                 None,
+            "task_type":            None,
+            "task_description":     None,
+            "unanswered_questions": [],
         }
 
 

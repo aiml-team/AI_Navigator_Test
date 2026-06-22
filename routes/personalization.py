@@ -138,12 +138,10 @@ async def get_user_role(user_email: str = Query(...)):
 
     email = user_email.strip().lower()
 
-    # Try Redis cache first (None = miss; '' or role string = hit)
     cached_role = cache.get_user_default_role(email)
     if cached_role is not None:
         return {"default_role": cached_role}
 
-    # Cache miss — query DB
     conn = get_db()
     row  = conn.execute(
         "SELECT default_role FROM UserDefaultRole WHERE user_email = ?",
@@ -190,7 +188,5 @@ async def save_user_role(req: SaveUserRoleRequest):
 
     conn.close()
 
-    # Update cache immediately so subsequent reads are instant
     cache.set_user_default_role(email, role)
-
     return {"status": "ok", "default_role": role}

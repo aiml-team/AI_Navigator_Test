@@ -92,17 +92,19 @@ ADMIN_ONLY.forEach(sel => {
       ['railPolicies',    'dropPolicyUpload'],
       ['railToolsLog',    'dropToolChangeLog'],
       ['railFeedback',    'dropFeedbackView'],
+      ['railTechIssues',  null],
     ];
     map.forEach(([railId, drawerId]) => {
       const railBtn   = document.getElementById(railId);
-      const drawerBtn = document.getElementById(drawerId);
-      if (!railBtn || !drawerBtn || railBtn._wired) return;
+      if (!railBtn || railBtn._wired) return;
+      const drawerBtn = drawerId ? document.getElementById(drawerId) : null;
+      if (drawerId && !drawerBtn) return;   // expected drawer button is missing
       railBtn._wired = true;
       railBtn.addEventListener('click', () => {
         // Visual active state on the rail
         document.querySelectorAll('#adminRail .rail-item').forEach(i => i.classList.remove('active'));
         railBtn.classList.add('active');
-        drawerBtn.click();
+        if (drawerBtn) drawerBtn.click();
       });
     });
   }

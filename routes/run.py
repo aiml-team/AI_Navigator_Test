@@ -33,6 +33,7 @@ async def run_orchestrator(req: RunRequest):
         "internal_results": None, "external_results": None,
         "corlo_prompt": "", "prompt_version": "1.0",
         "llm_output": "", "token_estimate": 0, "error": None,
+        "skip_tool_recommendation": bool(req.skip_tool_recommendation),
     })
 
     audit_id  = str(uuid.uuid4())

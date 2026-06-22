@@ -1,4 +1,6 @@
+import uuid
 import warnings
+from datetime import datetime
 
 import pandas as pd
 
@@ -15,6 +17,61 @@ def _safe_val(val) -> str:
     if isinstance(val, float) and pd.isna(val):
         return ""
     return str(val).strip()
+
+
+def _save_scenarios_to_db(scenarios: list, source: str = "excel"):
+    from services.database import get_db
+    try:
+        conn = get_db()
+        conn.execute("DELETE FROM scenarios WHERE source = ?", (source,))
+        conn.commit()
+        for s in scenarios:
+            conn.execute(
+                "INSERT INTO scenarios (id, mega_group, category, phase, title, persona, scenario, task_type, source, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    str(uuid.uuid4()),
+                    s.get("mega_group", ""),
+                    s.get("category", ""),
+                    s.get("phase", ""),
+                    s.get("title", ""),
+                    s.get("persona", ""),
+                    s.get("scenario", ""),
+                    s.get("task_type", ""),
+                    source,
+                    datetime.utcnow().isoformat(),
+                ),
+            )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        warnings.warn(f"[SCENARIO_LIBRARY] DB save failed: {e}", RuntimeWarning, stacklevel=2)
+
+
+def _load_scenarios_from_db() -> list:
+    from services.database import get_db
+    try:
+        conn = get_db()
+        rows = conn.execute(
+            "SELECT mega_group, category, phase, title, persona, scenario, task_type "
+            "FROM scenarios ORDER BY source, created_at"
+        ).fetchall()
+        conn.close()
+        return [
+            {
+                "mega_group": r["mega_group"] or "",
+                "category":   r["category"]   or "",
+                "phase":      r["phase"]       or "",
+                "title":      r["title"]       or "",
+                "persona":    r["persona"]     or "",
+                "scenario":   r["scenario"]    or "",
+                "task_type":  r["task_type"]   or "",
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        warnings.warn(f"[SCENARIO_LIBRARY] DB load failed: {e}", RuntimeWarning, stacklevel=2)
+        return []
 
 
 def _load_scenario_library_from_bytes(excel_bytes: bytes) -> list:
@@ -123,16 +180,29 @@ def reload_scenario_library(excel_bytes: bytes = None,
         with open(excel_path, "rb") as fh:
             new = _load_scenario_library_from_bytes(fh.read())
 
-    SCENARIO_LIBRARY.clear()
-    SCENARIO_LIBRARY.extend(new)
+    _save_scenarios_to_db(new, source="excel")
 
+    # Reload all rows from DB so manual/approved entries are kept in memory too
+    all_rows = _load_scenarios_from_db()
+    SCENARIO_LIBRARY.clear()
+    SCENARIO_LIBRARY.extend(all_rows if all_rows else new)
+
+
+# ── Startup: prefer DB, fall back to Excel ──────────────────────
 
 try:
-    reload_scenario_library()
+    _db_scenarios = _load_scenarios_from_db()
+    if _db_scenarios:
+        SCENARIO_LIBRARY.extend(_db_scenarios)
+    else:
+        reload_scenario_library()
 except Exception as _e:
-    warnings.warn(
-        f"[SCENARIO_LIBRARY] Failed to load Excel on startup: {_e}. "
-        "Upload via the Scenario Library upload button in the UI.",
-        RuntimeWarning,
-        stacklevel=1,
-    )
+    try:
+        reload_scenario_library()
+    except Exception as _e2:
+        warnings.warn(
+            f"[SCENARIO_LIBRARY] Failed to load on startup: {_e2}. "
+            "Upload via the Scenario Library upload button in the UI.",
+            RuntimeWarning,
+            stacklevel=1,
+        )

@@ -11,6 +11,8 @@ from routes.prompt_versions import router as prompt_versions_router
 from routes.refine import router as refine_router
 from routes.auth_routes import router as auth_router
 from routes.personalization import router as personalization_router
+from routes.technical_feedback import router as tech_feedback_router
+from routes.saved_scenarios import router as saved_scenarios_router
 # ── OKTA-DISABLED ─ uncomment the next line to re-enable Okta SSO routes
 # from routes.saml_routes import router as saml_router
 
@@ -27,5 +29,7 @@ router.include_router(prompt_versions_router)
 router.include_router(refine_router)
 router.include_router(auth_router)
 router.include_router(personalization_router)
+router.include_router(tech_feedback_router)
+router.include_router(saved_scenarios_router)
 # ── OKTA-DISABLED ─ uncomment the next line to re-enable Okta SSO routes
 # router.include_router(saml_router)

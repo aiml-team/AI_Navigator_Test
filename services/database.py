@@ -10,12 +10,15 @@ init_db()         → creates all tables if they don't exist (called at startup)
 """
 
 import json
+import logging
 import os
 import re
 import uuid
 from datetime import datetime
 
 import pyodbc
+
+_log = logging.getLogger("services.database")
 
 
 # ── raw connection ─────────────────────────────────────────────
@@ -34,7 +37,7 @@ def _get_raw_conn() -> pyodbc.Connection:
         f"PWD={password};"
         "Encrypt=yes;"
         "TrustServerCertificate=no;"
-        "Connection Timeout=30;"
+        "Connection Timeout=10;"
     )
     conn = pyodbc.connect(conn_str)
     conn.autocommit = False
@@ -207,8 +210,15 @@ def log_tool_change(tool_name: str, action: str, changed_fields: dict = None, no
 # ── init_db — idempotent table creation in Azure SQL ──────────
 
 def init_db():
-    
-    conn = get_db()
+    try:
+        conn = get_db()
+    except Exception as exc:
+        _log.warning(
+            "[db] Could not connect to Azure SQL at startup — skipping table init. "
+            "The app will start, but database-backed features will fail until the "
+            "connection is restored. Error: %s", exc
+        )
+        return
 
     ddl_statements = [
         """
@@ -280,6 +290,7 @@ def init_db():
             output_type     NVARCHAR(255)  NULL DEFAULT '',
             is_internal     INT            NULL DEFAULT 0,
             raw_data        NVARCHAR(MAX)  NULL DEFAULT '{}',
+            source          NVARCHAR(50)   NULL DEFAULT 'manual',
             created_at      NVARCHAR(50)   NULL,
             updated_at      NVARCHAR(50)   NULL,
             CONSTRAINT uq_registered_tools_name UNIQUE (tool_name)
@@ -327,6 +338,26 @@ def init_db():
         )
         """,
         """
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'technical_feedbacks')
+        CREATE TABLE technical_feedbacks (
+            id              NVARCHAR(64)   NOT NULL PRIMARY KEY,
+            feedback_id     NVARCHAR(64)   NULL DEFAULT '',
+            problem_title   NVARCHAR(500)  NOT NULL,
+            problem_desc    NVARCHAR(MAX)  NULL DEFAULT '',
+            category        NVARCHAR(100)  NULL DEFAULT '',
+            feature_area    NVARCHAR(100)  NULL DEFAULT '',
+            status          NVARCHAR(50)   NOT NULL DEFAULT 'pending',
+            affected_count  INT            NOT NULL DEFAULT 1,
+            reporter_emails NVARCHAR(MAX)  NULL DEFAULT '[]',
+            first_reported  NVARCHAR(50)   NULL DEFAULT '',
+            last_reported   NVARCHAR(50)   NULL DEFAULT '',
+            resolved_at     NVARCHAR(50)   NULL DEFAULT '',
+            admin_note      NVARCHAR(MAX)  NULL DEFAULT '',
+            created_at      NVARCHAR(50)   NULL DEFAULT '',
+            updated_at      NVARCHAR(50)   NULL DEFAULT ''
+        )
+        """,
+        """
         IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'UserDefaultRole')
         CREATE TABLE UserDefaultRole (
             id           INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
@@ -335,6 +366,35 @@ def init_db():
             created_at   NVARCHAR(50)      NULL,
             updated_at   NVARCHAR(50)      NULL,
             CONSTRAINT uq_user_default_role UNIQUE (user_email)
+        )
+        """,
+        """
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'user_saved_scenarios')
+        CREATE TABLE user_saved_scenarios (
+            id          NVARCHAR(64)   NOT NULL PRIMARY KEY,
+            user_email  NVARCHAR(255)  NOT NULL,
+            title       NVARCHAR(500)  NOT NULL,
+            scenario    NVARCHAR(MAX)  NULL DEFAULT '',
+            persona     NVARCHAR(255)  NULL DEFAULT '',
+            mega_group  NVARCHAR(255)  NULL DEFAULT '',
+            category    NVARCHAR(255)  NULL DEFAULT '',
+            saved_at    NVARCHAR(50)   NULL DEFAULT '',
+            CONSTRAINT uq_user_saved_scenario UNIQUE (user_email, title)
+        )
+        """,
+        """
+        IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'scenarios')
+        CREATE TABLE scenarios (
+            id          NVARCHAR(64)   NOT NULL PRIMARY KEY,
+            mega_group  NVARCHAR(255)  NULL DEFAULT '',
+            category    NVARCHAR(255)  NULL DEFAULT '',
+            phase       NVARCHAR(255)  NULL DEFAULT '',
+            title       NVARCHAR(500)  NULL DEFAULT '',
+            persona     NVARCHAR(255)  NULL DEFAULT '',
+            scenario    NVARCHAR(MAX)  NULL DEFAULT '',
+            task_type   NVARCHAR(255)  NULL DEFAULT '',
+            source      NVARCHAR(50)   NULL DEFAULT 'excel',
+            created_at  NVARCHAR(50)   NULL DEFAULT ''
         )
         """,
     ]
@@ -354,13 +414,15 @@ def init_db():
 
 def _add_columns_if_missing(conn: AzureSqlConn):
     additions = [
-        ("audit_log", "policy_blocked", "INT NULL DEFAULT 0"),
-        ("audit_log", "policy_summary",  "NVARCHAR(MAX) NULL DEFAULT ''"),
-        ("audit_log", "role",            "NVARCHAR(255) NULL DEFAULT 'general'"),
-        ("audit_log", "user_email",      "NVARCHAR(255) NULL DEFAULT ''"),
-        ("feedback",  "email",           "NVARCHAR(255) NULL DEFAULT ''"),
-        ("feedback",  "source",          "NVARCHAR(50) NULL DEFAULT 'form'"),
-        ("feedback",  "files",           "NVARCHAR(MAX) NULL DEFAULT '[]'"),
+        ("audit_log",           "policy_blocked", "INT NULL DEFAULT 0"),
+        ("audit_log",           "policy_summary",  "NVARCHAR(MAX) NULL DEFAULT ''"),
+        ("audit_log",           "role",            "NVARCHAR(255) NULL DEFAULT 'general'"),
+        ("audit_log",           "user_email",      "NVARCHAR(255) NULL DEFAULT ''"),
+        ("feedback",            "email",           "NVARCHAR(255) NULL DEFAULT ''"),
+        ("feedback",            "source",          "NVARCHAR(50) NULL DEFAULT 'form'"),
+        ("feedback",            "files",           "NVARCHAR(MAX) NULL DEFAULT '[]'"),
+        ("technical_feedbacks", "feature_area",    "NVARCHAR(100) NULL DEFAULT ''"),
+        ("registered_tools",    "source",          "NVARCHAR(50) NULL DEFAULT 'manual'"),
     ]
     for table, col, definition in additions:
         try:

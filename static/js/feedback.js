@@ -268,10 +268,29 @@ function getLoggedInEmail() {
 
       const res = await fetch('/api/feedback', { method: 'POST', body: fd });
       if (!res.ok) throw new Error('Server error');
+      const result = await res.json();
 
       formBody.style.display = 'none';
+
+      // Re-submit callback — invoked when user selects "Different problem".
+      const onForceNew = async () => {
+        const fd2 = new FormData();
+        fd2.append('email',      email);
+        fd2.append('rating',     selectedRating);
+        fd2.append('comment',    comment);
+        fd2.append('issue_type', selectedIssues.join(', '));
+        fd2.append('audit_id',   currentAuditId);
+        fd2.append('source',     'form');
+        fd2.append('force_new',  'true');
+        selectedFiles.forEach(f => fd2.append('files', f, f.name));
+        const res2 = await fetch('/api/feedback', { method: 'POST', body: fd2 });
+        if (!res2.ok) throw new Error('Server error');
+        const result2 = await res2.json();
+        _applyTriageMessage(formSuccess, result2.triage);
+      };
+
+      _applyTriageMessage(formSuccess, result.triage, onForceNew);
       formSuccess.classList.add('show');
-      setTimeout(closeForm, 2200);
     } catch (err) {
       btn.disabled    = false;
       btn.textContent = 'Submit Feedback';
@@ -284,6 +303,97 @@ function getLoggedInEmail() {
   }
 
   window.openFeedbackForm = openForm;
+
+  /* ── Triage success message helper (shared by both forms) ──
+     onForceNew: optional async callback — called when the user chooses
+     "Different problem" so the form can re-submit with force_new=true. */
+  window._applyTriageMessage = function _applyTriageMessage(successEl, triage, onForceNew) {
+    if (!successEl) return;
+    if (!triage || !triage.is_technical) {
+      // Default non-technical message
+      successEl.innerHTML = `
+        <div class="fb-success-icon">🎉</div>
+        <div class="fb-success-title">Thank you for your feedback!</div>
+        <div class="fb-success-sub">Your response has been recorded and will help us improve.</div>`;
+      return;
+    }
+
+    if (triage.is_known) {
+      // Ask the user whether this is the same problem or a new one.
+      const isActive    = triage.status === 'in_progress';
+      const statusLabel = isActive
+        ? 'currently being investigated by our team'
+        : 'already queued for investigation';
+
+      successEl.innerHTML = `
+        <div class="fb-success-icon">🔍</div>
+        <div class="fb-success-title">Similar issue already on record</div>
+        <div class="fb-success-sub" style="margin-bottom:4px;">
+          The issue <strong>${escFb(triage.title)}</strong> was previously reported and is
+          ${statusLabel}.<br>
+          Is this the <strong>same problem</strong> you're facing, or a <strong>different one</strong>?
+        </div>
+        <div style="display:flex;gap:10px;justify-content:center;margin-top:18px;flex-wrap:wrap;">
+          <button id="fbSameProblemBtn" style="padding:9px 20px;background:#f3f4f6;color:#374151;
+            border:1px solid #d1d5db;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">
+            ${isActive ? '🔧' : '📋'}&nbsp; Same problem — it's already tracked
+          </button>
+          <button id="fbDiffProblemBtn" style="padding:9px 20px;background:#2563eb;color:#fff;
+            border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">
+            ➕&nbsp; Different problem — log separately
+          </button>
+        </div>`;
+
+      // "Same problem" → show the appropriate status message, no re-submit needed.
+      document.getElementById('fbSameProblemBtn')?.addEventListener('click', () => {
+        if (isActive) {
+          successEl.innerHTML = `
+            <div class="fb-success-icon">🔧</div>
+            <div class="fb-success-title">Already being investigated!</div>
+            <div class="fb-success-sub">
+              This issue (<strong>${escFb(triage.title)}</strong>) has already been reported and our
+              team is actively working on it. We'll update you once it's resolved — no further
+              action needed from you.
+            </div>`;
+        } else {
+          successEl.innerHTML = `
+            <div class="fb-success-icon">📋</div>
+            <div class="fb-success-title">Got it — we've noted your report!</div>
+            <div class="fb-success-sub">
+              This issue (<strong>${escFb(triage.title)}</strong>) is already in our queue.
+              We've recorded your report and will notify you when it's resolved.
+            </div>`;
+        }
+      });
+
+      // "Different problem" → re-submit as a brand-new issue.
+      document.getElementById('fbDiffProblemBtn')?.addEventListener('click', async () => {
+        const diffBtn = document.getElementById('fbDiffProblemBtn');
+        const sameBtn = document.getElementById('fbSameProblemBtn');
+        if (diffBtn) { diffBtn.disabled = true; diffBtn.textContent = 'Submitting…'; }
+        if (sameBtn) sameBtn.disabled = true;
+        if (onForceNew) {
+          try {
+            await onForceNew();
+          } catch {
+            if (diffBtn) { diffBtn.disabled = false; diffBtn.innerHTML = '➕&nbsp; Different problem — log separately'; }
+            if (sameBtn) sameBtn.disabled = false;
+          }
+        }
+      });
+      return;
+    }
+
+    // New technical issue
+    successEl.innerHTML = `
+      <div class="fb-success-icon">⚠️</div>
+      <div class="fb-success-title">Technical issue logged!</div>
+      <div class="fb-success-sub">
+        Your feedback has been flagged as a technical issue
+        (<strong>${escFb(triage.category)}</strong>) and our team has been notified immediately.
+        We'll investigate and keep you updated.
+      </div>`;
+  };
 
 
   /* ═══════════════════════════════════════
@@ -392,10 +502,11 @@ function getLoggedInEmail() {
 
       const res = await fetch('/api/feedback', { method: 'POST', body: fd });
       if (!res.ok) throw new Error('Server error');
+      const result = await res.json();
 
       rfBody.style.display = 'none';
+      _applyTriageMessage(rfSuccess, result.triage);
       rfSuccess.classList.add('show');
-      setTimeout(closeResponseForm, 2200);
     } catch (err) {
       btn.disabled    = false;
       btn.textContent = 'Submit Feedback';

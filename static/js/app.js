@@ -397,7 +397,7 @@ function enterPromptEditMode() {
   const okBar    = document.getElementById('promptEditOk');
   const editBtn  = document.getElementById('btnEditPrompt');
 
-  textarea.value        = display.textContent;
+  textarea.value        = currentCorlo || display.textContent;
   display.style.display = 'none';
   textarea.style.display = 'block';
   okBar.style.display   = 'flex';
@@ -412,8 +412,8 @@ function applyPromptEdit() {
   const okBar    = document.getElementById('promptEditOk');
   const editBtn  = document.getElementById('btnEditPrompt');
 
-  display.textContent    = textarea.value;
-  currentCorlo           = textarea.value;   // keep state in sync
+  currentCorlo           = textarea.value;
+  display.innerHTML      = _formatPromptHtml(textarea.value);
   display.style.display  = 'block';
   textarea.style.display = 'none';
   okBar.style.display    = 'none';
@@ -498,7 +498,7 @@ function _flashCopied(btn, label) {
 }
 
 function copyPromptText() {
-  const text = document.getElementById('resultPrompt').textContent;
+  const text = currentCorlo || document.getElementById('resultPrompt').textContent;
   if (!text || text.startsWith('(')) { showToast('Generate a prompt first.', 'error'); return; }
   _copyToClipboard(text, () => {
     _flashCopied(document.getElementById('btnCopyPrompt'));
@@ -806,11 +806,12 @@ async function _runGenerate(input, role, taskType) {
       headers: { 'Content-Type': 'application/json' },
       signal:  signal,
       body:    JSON.stringify({
-        user_input:       input,
-        role:             role,
-        task_type:        taskType,
-        data_sensitivity: 'general',
-        user_email:       _getSessionEmail(),
+        user_input:               input,
+        role:                     role,
+        task_type:                taskType,
+        data_sensitivity:         'general',
+        user_email:               _getSessionEmail(),
+        skip_tool_recommendation: !_toolRecEnabled,
       }),
     });
 
@@ -936,10 +937,51 @@ function buildPromptBadge(raw) {
 }
 
 
+/* ── Convert CORLO prompt text to readable HTML (bullets, bold, line breaks) ── */
+function _formatPromptHtml(text) {
+  if (!text) return '';
+  const lines = text.split('\n');
+  let html = '';
+  let inList = false;
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const isBullet = /^[\s]*[-•*]\s/.test(line);
+    const isNumbered = /^[\s]*\d+\.\s/.test(line);
+
+    if (isBullet || isNumbered) {
+      if (!inList) { html += '<ul style="margin:6px 0 6px 18px;padding:0;list-style:disc;">'; inList = true; }
+      const content = line.replace(/^[\s]*[-•*]\s/, '').replace(/^[\s]*\d+\.\s/, '');
+      html += `<li style="margin:3px 0;">${_applyInlineMarkdown(content)}</li>`;
+    } else {
+      if (inList) { html += '</ul>'; inList = false; }
+      if (line.trim() === '') {
+        html += '<br>';
+      } else {
+        html += `<div>${_applyInlineMarkdown(line)}</div>`;
+      }
+    }
+  }
+  if (inList) html += '</ul>';
+  return html.replace(/(<br>)+$/, '');
+}
+
+function _applyInlineMarkdown(text) {
+  let s = escapeHtml(text);
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/`(.+?)`/g, '<code style="background:var(--bg-secondary);padding:1px 4px;border-radius:3px;font-size:0.9em;">$1</code>');
+  return s;
+}
+
+
 /* ══════════════════════════════════════
    RENDER RESULT
 ══════════════════════════════════════ */
 function renderResult(data) {
+  // Show or hide the partial-info reminder note
+  const partialNote = document.getElementById('partialInfoNote');
+  if (partialNote) partialNote.style.display = _chatPartialInfo ? '' : 'none';
+
   // ── Meta badges ──
   const confClass   = data.tool_confidence === 'high'   ? 'conf-high'
                     : data.tool_confidence === 'medium' ? 'conf-med' : 'conf-low';
@@ -1107,7 +1149,7 @@ function renderResult(data) {
                 <div style="flex:1;display:flex;justify-content:flex-end;" id="alt-conf-${CSS.escape(a)}"></div>
                 ${(window._personalization?.hasToolAccess(a) ?? true)
                   ? `<button class="alt-card-btn" id="alt-btn-${CSS.escape(a)}" onclick="openAlternativeTool('${escapeHtml(a)}')" title="Open ${escapeHtml(a)}" style="flex-shrink:0;">↗ Open</button>`
-                  : `<span id="alt-btn-${CSS.escape(a)}" class="tool-no-access-msg" style="flex-shrink:0;font-size:11px;color:#ef4444;font-weight:600;">No access</span>`
+                  : `<span id="alt-btn-${CSS.escape(a)}" class="tool-no-access-msg" style="flex-shrink:0;font-size:11px;color:#ef4444;font-weight:600;">You don't have access to this Tool</span>`
                 }
               </div>
               <!-- Row 2: explanation -->
@@ -1137,11 +1179,12 @@ function renderResult(data) {
 
         if (iconEl) iconEl.innerHTML  = _toolIconHtml(a, info ? info.icon : null, 20);
 
-        // Open button URL — only wire if user has access
+        // Open button URL — enforce access at enrichment time (prefs may load after initial render)
         const _hasAccess = window._personalization?.hasToolAccess(a) ?? true;
         if (btnEl) {
           if (!_hasAccess) {
-            // already rendered as "No access" span — nothing to do
+            // Prefs may have loaded after the initial HTML was stamped — replace the Open button now
+            btnEl.outerHTML = `<span class="tool-no-access-msg" style="flex-shrink:0;font-size:11px;color:#ef4444;font-weight:600;">You don't have access to this Tool</span>`;
           } else if (toolUrl) {
             btnEl.onclick = () => window.open(toolUrl, '_blank', 'noopener');
           } else {
@@ -1178,6 +1221,17 @@ function renderResult(data) {
             </div>`;
         }
       });
+
+      // Enforce access on the main recommendation Open button too
+      // (same race condition fix — prefs may load after initial render)
+      const recOpenBtn = document.getElementById('toolRecOpenBtn');
+      if (recOpenBtn) {
+        const recTool = data.recommended_tool;
+        const recHasAccess = window._personalization?.hasToolAccess(recTool) ?? true;
+        if (!recHasAccess) {
+          recOpenBtn.outerHTML = `<span class="tool-no-access-msg" style="flex-shrink:0;white-space:nowrap;font-size:11.5px;color:#ef4444;font-weight:600;">You don't have access to this Tool</span>`;
+        }
+      }
     }).catch(() => {});
   } else {
     altBox.innerHTML = '';
@@ -1203,9 +1257,9 @@ function renderResult(data) {
   }
 
   // ── Output panels ──
-  document.getElementById('resultPrompt').textContent = data.policy_blocked
+  document.getElementById('resultPrompt').innerHTML = data.policy_blocked
     ? '(Prompt not generated — task was blocked by company policy.)'
-    : (data.corlo_prompt || '(No prompt generated)');
+    : _formatPromptHtml(data.corlo_prompt || '(No prompt generated)');
 
 // Policies Applied tab — rich HTML for both blocked and allowed cases
   const policySummary = data.policy_summary || '';
@@ -1352,8 +1406,36 @@ function renderResult(data) {
   // Reset active tab to CORLO Prompt (first tab)
   document.querySelectorAll('.output-tab').forEach((t, i)  => t.classList.toggle('active', i === 0));
   document.querySelectorAll('.output-panel').forEach((p, i) => p.classList.toggle('active', i === 0));
+
+  // Enforce access badges once prefs are definitely loaded (fixes race condition
+  // where render runs before the /api/user-ai-tools/preferences fetch completes)
+  const _mainTool = data.recommended_tool;
+  (window._personalization?.waitForPrefs?.() || Promise.resolve()).then(() => {
+    _enforceToolAccessButtons(_mainTool);
+  });
 }
 
+/* ── Replace Open buttons with no-access message for tools the user can't access ── */
+function _enforceToolAccessButtons(mainTool) {
+  if (!window._personalization) return;
+
+  // Main recommendation Open button
+  const recBtn = document.getElementById('toolRecOpenBtn');
+  if (recBtn && mainTool && !window._personalization.hasToolAccess(mainTool)) {
+    recBtn.outerHTML = `<span class="tool-no-access-msg" style="flex-shrink:0;white-space:nowrap;font-size:11.5px;color:#ef4444;font-weight:600;">You don't have access to this Tool</span>`;
+  }
+
+  // Alternative tool Open buttons
+  document.querySelectorAll('[id^="alt-btn-"]').forEach(el => {
+    if (el.tagName !== 'BUTTON') return;  // already a no-access span, skip
+    const onclick = el.getAttribute('onclick') || '';
+    const match   = onclick.match(/openAlternativeTool\('([^']+)'\)/);
+    if (!match) return;
+    if (!window._personalization.hasToolAccess(match[1])) {
+      el.outerHTML = `<span class="tool-no-access-msg" style="flex-shrink:0;font-size:11px;color:#ef4444;font-weight:600;">You don't have access to this Tool</span>`;
+    }
+  });
+}
 
 /* ══════════════════════════════════════
    REFINEMENT — user adds a comment to revise the CORLO prompt
@@ -1401,7 +1483,7 @@ async function handleRefine() {
 
     // Show the revised prompt in the CORLO Prompt panel
     const promptPanel = document.getElementById('resultPrompt');
-    if (promptPanel) promptPanel.textContent = data.revised_output;
+    if (promptPanel) promptPanel.innerHTML = _formatPromptHtml(data.revised_output);
 
     // Show revised banner
     const banner = document.getElementById('revisedBanner');
@@ -1732,11 +1814,25 @@ function _tokenizeIntent(q) {
   }
   return out;
 }
-/* Adaptive threshold — short queries strict, long queries permissive. */
-function _intentMinHits(n) {
-  if (n <= 3) return 1;
-  if (n <= 6) return 2;
-  return Math.max(2, Math.floor(n * 0.3));
+/* IDF weights for the tools corpus. Rare/specific tokens (e.g. "ricef",
+   "wricef") get a high weight; generic tokens ("document", "create") get
+   a low weight. Formula: log((N+1)/(df+1)) + 1 (smooth IDF). */
+function _computeToolsIdfWeights(tokens, allEntries) {
+  const N = allEntries.length || 1;
+  const weights = {};
+  for (const t of tokens) {
+    const df = allEntries.reduce((c, [name, info]) => {
+      const arrJoin = (a) => Array.isArray(a) ? a.join(' ') : '';
+      const hay = [
+        name, info.description, info.desc_content, info.category, info.output_type,
+        arrJoin(info.best_for), arrJoin(info.strong_signals),
+        arrJoin(info.not_for),  arrJoin(info.weak_signals), arrJoin(info.roles),
+      ].some(v => String(v || '').toLowerCase().includes(t));
+      return c + (hay ? 1 : 0);
+    }, 0);
+    weights[t] = Math.log((N + 1) / (df + 1)) + 1;
+  }
+  return weights;
 }
 
 /* ── Update sidebar nav counts and active state ── */
@@ -1816,19 +1912,18 @@ async function loadTools() {
     );
   }
 
-  /* intent filter — token-scored, sort by relevance, NO percentage shown.
-     Builds a per-tool haystack out of every intent-bearing field (name,
-     description, category, output_type, plus the array fields best_for /
-     strong_signals / not_for / weak_signals / roles flattened), tokenizes
-     the user's query, then keeps tools whose hit-count meets an adaptive
-     threshold and re-orders them best-match first. Designed so a long
-     natural-language intent like "Converting meeting transcript into
-     RICEF documents" still surfaces anything mentioning meeting /
-     transcript / RICEF / convert. */
+   /* intent filter — IDF-weighted scoring so specific/rare terms
+     (e.g. "wricef", "ricef") dominate the relevance score and generic
+     words ("document", "generate") contribute proportionally less.
+     Threshold: a tool must score >= 45% of the max possible weighted
+     score to appear, then results are sorted best-match first. */
   if (_toolsIntentSearch.trim()) {
-    const tokens  = _tokenizeIntent(_toolsIntentSearch);
-    const minHits = _intentMinHits(tokens.length);
+    const tokens = _tokenizeIntent(_toolsIntentSearch);
     if (tokens.length) {
+      const allToolEntries = Object.entries(_toolsData || {});
+      const idfWeights = _computeToolsIdfWeights(tokens, allToolEntries);
+      const maxScore   = tokens.reduce((sum, t) => sum + (idfWeights[t] || 1), 0);
+      const threshold  = maxScore * 0.45;
       const scored = [];
       for (const [name, info] of entries) {
         const arrJoin = (a) => Array.isArray(a) ? a.join(' ') : '';
@@ -1838,16 +1933,17 @@ async function loadTools() {
           arrJoin(info.best_for), arrJoin(info.strong_signals),
           arrJoin(info.not_for),  arrJoin(info.weak_signals),
           arrJoin(info.roles),
-        ].map(v => String(v || '').toLowerCase()).join(' \u0001 ');
+        ].map(v => String(v || '').toLowerCase()).join('  ');
         const nameLower = String(name || '').toLowerCase();
-        let hits = 0, boost = 0;
+        let score = 0;
         for (const t of tokens) {
           if (hay.includes(t)) {
-            hits++;
-            if (nameLower.includes(t)) boost += 0.5;   // name-match floats up
+            const w = idfWeights[t] || 1;
+            score += w;
+            if (nameLower.includes(t)) score += w * 0.5;
           }
         }
-        if (hits >= minHits) scored.push([name, info, hits + boost]);
+        if (score >= threshold) scored.push([name, info, score]);
       }
       scored.sort((a, b) => b[2] - a[2]);
       entries = scored.map(([n, i]) => [n, i]);
@@ -1914,8 +2010,14 @@ async function loadTools() {
             </div>
           </div>`
       : '';
+    // Build hover tooltip — description first, then best_for, then category fallback.
+    // Tools sourced from external LLMs (GPT, Copilot, etc.) often have no description
+    // in the registry, so we surface whatever metadata is available.
+    const _desc = (info.hover_description || '').trim();
+    const _tooltip = _desc ? escapeHtml(_desc) : '';
+
     return `
-      <div class="tool-card" data-tool-name="${escapeHtml(name.toLowerCase())}">
+      <div class="tool-card" data-tool-name="${escapeHtml(name.toLowerCase())}"${_tooltip ? ` title="${_tooltip}"` : ''}>
         <div class="tool-card-header" style="display:flex;align-items:flex-start;gap:10px;position:relative;">
           <div class="tool-icon">${_toolIconHtml(name, info.icon, 28)}</div>
           <div style="flex:1;min-width:0;">
@@ -1973,37 +2075,40 @@ function initToolsPage() {
     });
   }
 
-  /* ── search ── */
-  const searchEl = document.getElementById('toolsSearch');
+  /* ── unified search ──
+     Typing → keyword live filter (instant substring match).
+     Apply button or Enter → intent filter (token-scored semantic match). */
+  const searchEl  = document.getElementById('toolsSearch');
+  const intentBtn = document.getElementById('toolsIntentSearchBtn');
   if (searchEl) {
     const fresh = searchEl.cloneNode(true);
     searchEl.parentNode.replaceChild(fresh, searchEl);
     let t;
+
     fresh.addEventListener('input', () => {
       clearTimeout(t);
+      _toolsIntentSearch = '';
       t = setTimeout(() => { _toolsSearch = fresh.value; loadTools(); }, 250);
     });
-  }
 
-  /* ── intent search ── applies ONLY on Enter or Apply-button click.
-     Typing alone does NOT re-render, so the user can finish composing a
-     multi-word intent before the filter runs. Clearing the input via the
-     native 'x' fires the 'search' event and drops the filter immediately. */
-  const intentEl  = document.getElementById('toolsIntentSearch');
-  const intentBtn = document.getElementById('toolsIntentSearchBtn');
-  if (intentEl) {
-    const freshI = intentEl.cloneNode(true);
-    intentEl.parentNode.replaceChild(freshI, intentEl);
     const applyIntent = () => {
-      _toolsIntentSearch = freshI.value;
+      clearTimeout(t);
+      _toolsSearch = '';
+      _toolsIntentSearch = fresh.value;
       loadTools();
     };
-    freshI.addEventListener('keydown', e => {
+
+    fresh.addEventListener('keydown', e => {
       if (e.key === 'Enter') { e.preventDefault(); applyIntent(); }
     });
-    freshI.addEventListener('search', () => {
-      if (!freshI.value.trim()) applyIntent();
+    fresh.addEventListener('search', () => {
+      if (!fresh.value.trim()) {
+        _toolsSearch = '';
+        _toolsIntentSearch = '';
+        loadTools();
+      }
     });
+
     if (intentBtn) {
       const freshBtn = intentBtn.cloneNode(true);
       intentBtn.parentNode.replaceChild(freshBtn, intentBtn);
@@ -2887,6 +2992,31 @@ let _chatInitialInput   = '';
 let _chatBusy           = false;
 let _chatTurnCount      = 0;
 let _chatPendingField   = null;        // 'role' | 'task_type' | null — set during skip flow
+let _chatPartialInfo    = false;       // true when user proceeds with incomplete task details
+let _chatContinued      = false;       // true when user clicked "Continue Conversation" after generation
+let _toolRecEnabled     = true;        // session-level toggle — no DB; resets on page refresh
+
+/* ── Tool recommendation toggle button ── */
+function _initToolRecToggle() {
+  const btn = document.getElementById('chatToolRecBtn');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    _toolRecEnabled = !_toolRecEnabled;
+    _updateToolRecBtn();
+  });
+}
+
+function _updateToolRecBtn() {
+  const btn = document.getElementById('chatToolRecBtn');
+  if (!btn) return;
+  if (_toolRecEnabled) {
+    btn.textContent = 'Tool Recommendation: On';
+    btn.title       = 'Click to turn off — only the Prompt will be shown in the response';
+  } else {
+    btn.textContent = 'Tool Recommendation: Off';
+    btn.title       = 'Click to turn on — the best Tool Recommendation will be shown with the Prompt';
+  }
+}
 
 /* ── Init ── */
 function initChatPanel() {
@@ -2909,6 +3039,8 @@ function initChatPanel() {
 
   document.getElementById('chatSkipAllBtn').addEventListener('click', _chatSkipAll);
   document.getElementById('chatGenerateBtn').addEventListener('click', _chatTriggerGenerate);
+  document.getElementById('chatContinueBtn')?.addEventListener('click', _chatContinueConversation);
+  _initToolRecToggle();
   // "New task" wipes the chat + result. Confirm if there's anything to lose
   // (real messages from either side or extracted task context).
   document.getElementById('chatResetBtn').addEventListener('click', () => {
@@ -3112,11 +3244,22 @@ function _chatShowTaskSummary() {
   const taskType = _chatExtracted.task_type        || 'general';
   const taskDesc = _chatExtracted.task_description || '';
 
+  // Break task description into readable bullet points at '; ' or '. '
+  const descParts = taskDesc
+    .split(/;\s+/)
+    .flatMap(s => s.split(/\.\s+(?=[A-Z])/))
+    .map(s => s.trim().replace(/\.$/, ''))
+    .filter(Boolean);
+
+  const descBlock = descParts.length > 1
+    ? '\n' + descParts.map(p => `  - ${p}`).join('\n')
+    : (taskDesc ? ' ' + taskDesc : ' (not specified)');
+
   const summary =
-    'Here\'s what I understood from our conversation:\n' +
+    'Here\'s what I understood from our conversation:\n\n' +
     `• Role: ${capitalize(role)}\n` +
     `• Task Type: ${capitalize(taskType)}\n` +
-    `• Task Description: ${taskDesc}\n\n` +
+    `• Task Details:${descBlock}\n\n` +
     'Click Generate below if this looks right, or keep chatting to refine.';
 
   _chatAddMessage('agent', summary);
@@ -3141,6 +3284,9 @@ async function _chatSend() {
   const inputEl = document.getElementById('chatInput');
   const text = inputEl.value.trim();
   if (!text) return;
+
+  // Remove any pending partial-choice buttons when user types an answer instead
+  document.getElementById('chatPartialChoices')?.remove();
 
   inputEl.value = '';
   inputEl.style.height = 'auto';
@@ -3186,8 +3332,11 @@ async function _chatSend() {
     _chatShowTyping(false);
 
     if (data.action === 'ready') {
+      if (data.partial_info) _chatPartialInfo = true;
       _chatMarkReady(data);
       _chatShowTaskSummary();
+    } else if (data.action === 'partial') {
+      _chatShowPartialChoices(data.unanswered_questions || []);
     } else {
       if (data.message) _chatAddMessage('agent', data.message);
     }
@@ -3277,6 +3426,126 @@ async function _chatAskMissingThenGenerate() {
   _chatMarkReady(_chatExtracted);
 }
 
+
+/* ── Show partial-answer choices when some questions were unanswered ── */
+function _chatShowPartialChoices(unansweredQuestions) {
+  const questionLines = unansweredQuestions.length
+    ? '\n\n' + unansweredQuestions.map(q => `• ${q}`).join('\n')
+    : '';
+
+  const msg = 'I noticed a couple of my questions weren\'t fully answered. Here\'s what\'s still missing:' +
+    questionLines +
+    '\n\nWould you like to answer the remaining questions, or proceed with the information you\'ve already provided?';
+
+  _chatAddMessage('agent', msg);
+
+  // Append choice buttons below the message
+  const container = document.getElementById('chatMessages');
+  if (!container) return;
+
+  const choicesDiv = document.createElement('div');
+  choicesDiv.id = 'chatPartialChoices';
+  choicesDiv.style.cssText = 'display:flex;gap:8px;padding:4px 12px 12px 52px;';
+
+  const answerBtn = document.createElement('button');
+  answerBtn.className = 'btn btn-secondary btn-sm';
+  answerBtn.style.cssText = 'display:inline-flex;align-items:center;gap:5px;';
+  answerBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Answer Remaining';
+
+  const proceedBtn = document.createElement('button');
+  proceedBtn.className = 'btn btn-primary btn-sm';
+  proceedBtn.style.cssText = 'display:inline-flex;align-items:center;gap:5px;';
+  proceedBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Proceed with Available Info';
+
+  choicesDiv.appendChild(answerBtn);
+  choicesDiv.appendChild(proceedBtn);
+  container.appendChild(choicesDiv);
+  _chatScrollBottom();
+
+  answerBtn.addEventListener('click', () => {
+    choicesDiv.remove();
+    _chatAddMessage('agent', 'Of course! Please type your answers and I\'ll incorporate them into the recommendation.');
+  });
+
+  proceedBtn.addEventListener('click', async () => {
+    choicesDiv.remove();
+    await _chatProceedWithPartialInfo();
+  });
+}
+
+/* ── Proceed with partial info: summarize → show what was understood → generate ── */
+async function _chatProceedWithPartialInfo() {
+  if (_chatBusy) return;
+  _chatBusy = true;
+  _chatPartialInfo = true;
+
+  _chatLockInput();
+  document.getElementById('chatReadyBanner')?.classList.remove('visible');
+
+  // Summarize first to extract the best available data from the conversation
+  try {
+    const res = await fetch(CHAT_API.summarize, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages:     _chatMessages,
+        user_input:   _chatInitialInput,
+        role:         _chatExtracted.role,
+        task_type:    _chatExtracted.task_type,
+        default_role: _getSavedDefaultRole(),
+      }),
+    });
+    const data = await res.json();
+    _chatExtracted.role             = data.role             || _chatExtracted.role;
+    _chatExtracted.task_type        = data.task_type        || _chatExtracted.task_type;
+    _chatExtracted.task_description = data.task_description || _chatExtracted.task_description;
+  } catch {
+    /* keep whatever was extracted */
+  } finally {
+    _chatBusy = false;
+  }
+
+  const role     = _chatExtracted.role     || _getSavedDefaultRole() || 'general';
+  const taskType = _chatExtracted.task_type || 'general';
+  const taskDesc = _chatExtracted.task_description || _chatInitialInput || '';
+
+  if (!taskDesc) { showToast('Please describe your task first.', 'error'); return; }
+
+  // Show a summary of what was understood before generating
+  _chatShowPartialProceedSummary(role, taskType, taskDesc);
+  _chatAddMessage('agent', '⚡ Generating your prompt with the available information…');
+
+  const roleEl     = document.getElementById('selRole');
+  const taskTypeEl = document.getElementById('selTaskType');
+  const inputEl    = document.getElementById('userInput');
+  const charCount  = document.getElementById('charCount');
+  if (roleEl)     roleEl.value     = role;
+  if (taskTypeEl) taskTypeEl.value = taskType;
+  if (inputEl)    { inputEl.value = taskDesc; if (charCount) charCount.textContent = taskDesc.length; }
+
+  await _runGenerate(taskDesc, role, taskType);
+}
+
+/* ── Task summary shown when proceeding with partial info ── */
+function _chatShowPartialProceedSummary(role, taskType, taskDesc) {
+  const descParts = taskDesc
+    .split(/;\s+/)
+    .flatMap(s => s.split(/\.\s+(?=[A-Z])/))
+    .map(s => s.trim().replace(/\.$/, ''))
+    .filter(Boolean);
+
+  const descBlock = descParts.length > 1
+    ? '\n' + descParts.map(p => `  - ${p}`).join('\n')
+    : (taskDesc ? ' ' + taskDesc : ' (not specified)');
+
+  _chatAddMessage('agent',
+    'Here\'s what I understood from our conversation:\n\n' +
+    `• Role: ${capitalize(role)}\n` +
+    `• Task Type: ${capitalize(taskType)}\n` +
+    `• Task Details:${descBlock}\n\n` +
+    'Proceeding to generate your result with the available information.'
+  );
+}
 
 /* ══════════════════════════════════════
    TOOL CHANGE LOG MODAL
@@ -3418,11 +3687,21 @@ function _chatShowSummaryAndGenerate() {
   const taskType = _chatExtracted.task_type        || 'general';
   const taskDesc = _chatExtracted.task_description || '';
 
+  const descParts = taskDesc
+    .split(/;\s+/)
+    .flatMap(s => s.split(/\.\s+(?=[A-Z])/))
+    .map(s => s.trim().replace(/\.$/, ''))
+    .filter(Boolean);
+
+  const descBlock = descParts.length > 1
+    ? '\n' + descParts.map(p => `  - ${p}`).join('\n')
+    : (taskDesc ? ' ' + taskDesc : ' (not specified)');
+
   _chatAddMessage('agent',
-    'Here\'s what I understood from our conversation:\n' +
+    'Here\'s what I understood from our conversation:\n\n' +
     `• Role: ${capitalize(role)}\n` +
     `• Task Type: ${capitalize(taskType)}\n` +
-    `• Task Description: ${taskDesc}\n\n` +
+    `• Task Details:${descBlock}\n\n` +
     'You can add more details below, or click Generate when ready.'
   );
 }
@@ -3441,6 +3720,57 @@ function _chatLockInput() {
   if (chatSendBtn)     { chatSendBtn.disabled     = true; }
   if (chatGenerateBtn) { chatGenerateBtn.disabled  = true; }
   if (chatSkipAllBtn)  { chatSkipAllBtn.disabled   = true; }
+
+  const chatContinueBtn = document.getElementById('chatContinueBtn');
+  if (chatContinueBtn) chatContinueBtn.style.display = '';
+}
+
+/* ── Re-enable chat after generation so user can add more details ── */
+function _chatContinueConversation() {
+  _chatContinued = true;
+
+  const btn = document.getElementById('chatContinueBtn');
+  if (btn) btn.style.display = 'none';
+
+  const chatInput       = document.getElementById('chatInput');
+  const chatSendBtn     = document.getElementById('chatSendBtn');
+  const chatGenerateBtn = document.getElementById('chatGenerateBtn');
+  const chatSkipAllBtn  = document.getElementById('chatSkipAllBtn');
+
+  if (chatInput) {
+    chatInput.disabled    = false;
+    chatInput.placeholder = 'Add more details to refine your result…';
+  }
+  if (chatSendBtn)     chatSendBtn.disabled     = false;
+  if (chatGenerateBtn) chatGenerateBtn.disabled  = false;
+  if (chatSkipAllBtn)  chatSkipAllBtn.disabled   = false;
+
+  _chatAddMessage('agent', 'Sure! Feel free to add any additional details below. When you\'re ready, click Generate again to update your result.');
+}
+
+/* ── Task summary shown right before generating (used on continuation) ── */
+function _chatShowGenerateSummary() {
+  const role     = _chatExtracted.role             || 'general';
+  const taskType = _chatExtracted.task_type        || 'general';
+  const taskDesc = _chatExtracted.task_description || '';
+
+  const descParts = taskDesc
+    .split(/;\s+/)
+    .flatMap(s => s.split(/\.\s+(?=[A-Z])/))
+    .map(s => s.trim().replace(/\.$/, ''))
+    .filter(Boolean);
+
+  const descBlock = descParts.length > 1
+    ? '\n' + descParts.map(p => `  - ${p}`).join('\n')
+    : (taskDesc ? ' ' + taskDesc : ' (not specified)');
+
+  _chatAddMessage('agent',
+    'Here\'s what I understood from our conversation:\n\n' +
+    `• Role: ${capitalize(role)}\n` +
+    `• Task Type: ${capitalize(taskType)}\n` +
+    `• Task Details:${descBlock}\n\n` +
+    'Generating your updated result now.'
+  );
 }
 
 /* ── Generate: fill hidden fields + run ── */
@@ -3466,6 +3796,13 @@ async function _chatTriggerGenerate() {
 
   _chatLockInput();
   document.getElementById('chatReadyBanner')?.classList.remove('visible');
+
+  // When re-generating after "Continue Conversation", recap what was understood
+  if (_chatContinued) {
+    _chatContinued = false;
+    _chatShowGenerateSummary();
+  }
+
   _chatAddMessage('agent', '⚡ Generating your prompt now…');
 
   await _runGenerate(taskDesc, role, taskType);
@@ -3486,8 +3823,12 @@ function _chatReset() {
   _chatBusy         = false;
   _chatTurnCount    = 0;
   _chatPendingField = null;
+  _chatPartialInfo  = false;
+  _chatContinued    = false;
 
   const container = document.getElementById('chatMessages');
+  const chatContinueBtn = document.getElementById('chatContinueBtn');
+  if (chatContinueBtn) chatContinueBtn.style.display = 'none';
   if (container) container.innerHTML = '';
   document.getElementById('chatSummaryBar')?.classList.remove('visible');
   document.getElementById('chatReadyBanner')?.classList.remove('visible');

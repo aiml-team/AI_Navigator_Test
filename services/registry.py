@@ -1,6 +1,8 @@
+import logging
 import os
 import json
 import threading
+import uuid
 import warnings
 from datetime import datetime
 
@@ -189,6 +191,116 @@ def load_tools_registry_from_excel(
         return _load_from_bytes(fh.read())
 
 
+_registry_log = logging.getLogger("services.registry")
+
+
+def _save_excel_tools_to_db(tools: dict) -> int:
+    """Persist Excel-loaded tools to Azure SQL registered_tools (source='excel').
+    Manually registered tools (source='manual') are never touched.
+    Uses per-row commits so a single bad row never rolls back the whole batch.
+    Returns the number of tools saved.
+    """
+    from services.database import get_db
+
+    print(f"[registry] _save_excel_tools_to_db: saving {len(tools)} tools to Azure SQL")
+
+    # ── Step 1: prepare schema ────────────────────────────────────
+    try:
+        prep = get_db()
+        # Ensure source column exists (missing in older schemas)
+        prep.execute(
+            "IF NOT EXISTS ("
+            "  SELECT 1 FROM sys.columns "
+            "  WHERE object_id = OBJECT_ID(N'registered_tools') AND name = N'source'"
+            ") ALTER TABLE registered_tools ADD source NVARCHAR(50) NULL DEFAULT 'manual'"
+        )
+        prep.commit()
+        # Widen icon column if it is still the original narrow NVARCHAR(10)
+        prep.execute(
+            "IF EXISTS ("
+            "  SELECT 1 FROM sys.columns "
+            "  WHERE object_id = OBJECT_ID(N'registered_tools') AND name = N'icon' AND max_length < 100"
+            ") ALTER TABLE registered_tools ALTER COLUMN icon NVARCHAR(255) NULL"
+        )
+        prep.commit()
+        prep.close()
+    except Exception as schema_e:
+        print(f"[registry] WARNING: schema prep failed (continuing anyway): {schema_e}")
+        _registry_log.warning("[registry] schema prep error: %s", schema_e)
+
+    # ── Step 2: clear old Excel-sourced rows ──────────────────────
+    try:
+        del_conn = get_db()
+        del_conn.execute("DELETE FROM registered_tools WHERE source = 'excel'")
+        del_conn.commit()
+        del_conn.close()
+    except Exception as del_e:
+        print(f"[registry] WARNING: could not clear old Excel rows: {del_e}")
+        _registry_log.warning("[registry] delete Excel rows error: %s", del_e)
+
+    # ── Step 3: insert each tool (per-row commit + try/except) ────
+    now = datetime.utcnow().isoformat()
+    saved = 0
+    failed = 0
+
+    for tool_name, info in tools.items():
+        try:
+            # Use a fresh connection per row to avoid shared-cursor issues
+            row_conn = get_db()
+
+            # Skip if a manual registration already exists for this tool name
+            existing = row_conn.execute(
+                "SELECT id FROM registered_tools WHERE tool_name = ?", (tool_name,)
+            ).fetchone()
+
+            if not existing:
+                # Truncate fields to their column lengths
+                icon_val  = (str(info.get("icon") or "🤖"))[:50]
+                cat_val   = (str(info.get("category") or ""))[:255]
+                url_val   = (str(info.get("url") or ""))[:500]
+                otype_val = (str(info.get("output_type") or ""))[:255]
+
+                row_conn.execute(
+                    """INSERT INTO registered_tools
+                       (id, tool_name, description, category, url, icon,
+                        best_for, strong_signals, weak_signals, not_for,
+                        roles, output_type, is_internal, raw_data, source,
+                        created_at, updated_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        str(uuid.uuid4()),
+                        tool_name,
+                        str(info.get("description") or ""),
+                        cat_val,
+                        url_val,
+                        icon_val,
+                        json.dumps(info.get("best_for", []) or []),
+                        json.dumps(info.get("strong_signals", []) or []),
+                        json.dumps(info.get("weak_signals", []) or []),
+                        json.dumps(info.get("not_for", []) or []),
+                        json.dumps(info.get("roles", []) or []),
+                        otype_val,
+                        1 if info.get("is_internal") else 0,
+                        json.dumps(info.get("raw_data", {}) or {}),
+                        "excel",
+                        now, now,
+                    ),
+                )
+                row_conn.commit()
+                saved += 1
+
+            row_conn.close()
+
+        except Exception as row_e:
+            failed += 1
+            print(f"[registry] FAILED to save tool '{tool_name}': {row_e}")
+            _registry_log.error("[registry] Failed to save tool '%s': %s", tool_name, row_e)
+
+    print(f"[registry] DB save done: {saved} saved, {failed} failed out of {len(tools)} tools")
+    _registry_log.info("[registry] DB save: %d saved, %d failed / %d total", saved, failed, len(tools))
+    return saved
+
+
 def _merge_db_tools_into_registry():
     from services.database import get_db
     try:
@@ -243,6 +355,7 @@ def reload_tools_registry(excel_bytes: bytes = None,
 
     AI_TOOLS_REGISTRY.clear()
     AI_TOOLS_REGISTRY.update(new)
+    _save_excel_tools_to_db(new)      # persist Excel tools to Azure SQL
     _merge_db_tools_into_registry()   # also writes to Redis
     _TOOL_ENRICHMENT_CACHE.clear()
 
@@ -344,12 +457,20 @@ def _bootstrap_registry():
     except Exception:
         pass
 
-    # 2. Load from Excel on disk
-    try:
-        AI_TOOLS_REGISTRY.update(load_tools_registry_from_excel())
-    except Exception as e:
+    # 2. Load from Excel on disk — try common filenames
+    _excel_loaded: dict = {}
+    _candidate_paths = ["AI_TOOLS.xlsx", "AI_TOOLS_Roles.xlsx", "AI_Tools.xlsx"]
+    for _path in _candidate_paths:
+        try:
+            _excel_loaded = load_tools_registry_from_excel(excel_path=_path)
+            if _excel_loaded:
+                AI_TOOLS_REGISTRY.update(_excel_loaded)
+                break
+        except Exception:
+            continue
+    if not _excel_loaded:
         warnings.warn(
-            f"[AI_TOOLS_REGISTRY] Failed to load Excel on startup: {e}. "
+            "[AI_TOOLS_REGISTRY] No Excel file found on disk at startup. "
             "Upload a registry via the UI header dropdown before using the tool recommender.",
             RuntimeWarning,
             stacklevel=1,
@@ -360,6 +481,8 @@ def _bootstrap_registry():
         _merge_db_tools_into_registry()   # also writes result back to Redis
     except Exception:
         pass
+    # NOTE: Persisting Excel tools to Azure SQL is done in main.py lifespan
+    # AFTER init_db() runs — not here, because tables may not exist yet at import time.
 
 
 _bootstrap_registry()

@@ -462,6 +462,10 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
         Feedback Inbox
       </button>
+      <button id="railTechIssues" class="rail-item">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M4.93 19.07l1.41-1.41M19.07 19.07l-1.41-1.41M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>
+        Tech Issues
+      </button>
     </nav>
   </div>
 </aside>
@@ -491,6 +495,8 @@
               <div class="chat-panel-subtitle">Tell me what you need — I'll guide you</div>
             </div>
             <div class="chat-panel-header-actions">
+              <button class="chat-reset-btn" id="chatToolRecBtn"
+                title="Turn it off — you will see only the Prompt">Tool Recommendation: On</button>
               <button class="chat-reset-btn" id="chatResetBtn" title="Start a new chat and clear everything">New task</button>
             </div>
           </div>
@@ -537,6 +543,9 @@
               </button>
               <button class="chat-action-btn primary-action" id="chatGenerateBtn" disabled title="Generate response using the gathered task info">
                 Generate
+              </button>
+              <button class="chat-action-btn" id="chatContinueBtn" style="display:none;background:#2563EB;color:#fff;border-color:transparent;font-weight:600;" title="Continue the conversation to add more details">
+                ↩ Continue Conversation
               </button>
             </div>
           </div>
@@ -621,6 +630,16 @@
 
               <div id="policyBlockedBox" style="display:none"></div>
 
+              <!-- Shown when generation proceeded with incomplete task details -->
+              <div id="partialInfoNote" style="display:none;padding:12px 14px;margin-bottom:14px;background:#FFF7ED;border:1px solid #FDE68A;border-radius:10px;">
+                <div style="display:flex;align-items:flex-start;gap:10px;">
+                  <span style="font-size:16px;flex-shrink:0;">&#9888;&#65039;</span>
+                  <div style="font-size:12.5px;color:#78350F;line-height:1.55;">
+                    <strong>Note:</strong> Some task details were not provided. Based on the information you shared, I've generated the best possible result and included recommendations where appropriate. You can provide additional details at any time for a more accurate and tailored response.
+                  </div>
+                </div>
+              </div>
+
               <div class="result-meta" id="resultMeta"></div>
               <div id="toolRecBox"></div>
               <div id="policyFlagsBox"></div>
@@ -658,12 +677,21 @@
               <div id="revisedBanner" class="revised-banner" style="display:none"></div>
               <!-- Edit / Copy / Save toolbar -->
               <div id="promptToolbar" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
-                <button class="btn btn-secondary btn-sm" id="btnEditPrompt">&#9998; Edit</button>
-                <button class="btn btn-secondary btn-sm" id="btnCopyPrompt">&#128203; Copy</button>
-                <button class="btn btn-secondary btn-sm" id="btnSavePrompt">&#9733; Save to Favourites</button>
+                <button class="btn btn-secondary btn-sm" id="btnEditPrompt" style="display:inline-flex;align-items:center;gap:5px;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  Edit
+                </button>
+                <button class="btn btn-secondary btn-sm" id="btnCopyPrompt" style="display:inline-flex;align-items:center;gap:5px;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                  Copy
+                </button>
+                <button class="btn btn-secondary btn-sm" id="btnSavePrompt" style="display:inline-flex;align-items:center;gap:5px;">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+                  Save to Favourites
+                </button>
               </div>
 
-              <div class="output-content code-block" id="resultPrompt"></div>
+              <div class="output-content code-block" id="resultPrompt" style="max-height:none;overflow-y:visible;"></div>
 
               <!-- Edit mode textarea — hidden by default -->
               <textarea id="promptEditArea" style="display:none;width:100%;min-height:340px;padding:14px;font-family:var(--mono);font-size:12px;line-height:1.5;border:2px solid var(--primary);border-radius:var(--radius-sm);background:var(--bg-white);color:var(--text);resize:vertical;outline:none;box-sizing:border-box;"></textarea>
@@ -773,20 +801,12 @@
             <p class="tools-subtitle">All available enterprise AI tools and their capabilities.</p>
           </div>
           <div class="tools-header-actions">
-            <input type="search" id="toolsSearch" class="tools-search" placeholder="Search tools…" aria-label="Search tools">
-            <!-- Intent search — applies ONLY on Enter or Apply click (not on
-                 every keystroke). Matches the typed intent against each
-                 tool's best_for / strong_signals / output_type / category /
-                 roles so users can ask "is there already a tool for X?"
-                 without the live-filter interrupting them mid-typing. -->
             <div style="display:flex;align-items:center;gap:4px;">
-              <input type="search" id="toolsIntentSearch" class="tools-search"
-                     placeholder="Describe what you want to do… (Enter)"
-                     aria-label="Search tools by intent"
-                     title="Type what you're trying to do in plain language — e.g. 'summarize meeting transcripts'. Press Enter to find the closest-matching tools."
+              <input type="search" id="toolsSearch" class="tools-search"
+                     placeholder="Search tools…"
+                     aria-label="Search tools"
                      style="min-width:260px;">
               <button class="tools-register-btn" id="toolsIntentSearchBtn" type="button"
-                      title="Apply intent filter"
                       style="background:transparent;color:var(--primary-dark);border:1.5px solid var(--blue-200);">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 Apply
@@ -1035,6 +1055,64 @@
     </div>
   </section>
 
+  <!-- ── TECHNICAL ISSUES PAGE (admin) ── -->
+  <section class="page" id="page-tech-issues">
+    <div class="page-scroll-body">
+      <div class="page-header">
+        <div>
+          <div class="title-row">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M4.93 19.07l1.41-1.41M19.07 19.07l-1.41-1.41M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>
+            <h2 class="page-title">Technical Issues</h2>
+          </div>
+          <p class="page-subtitle">AI-triaged feedback flagged as technical problems. Update status and add notes to track resolution.</p>
+        </div>
+      </div>
+
+      <!-- Summary cards + controls -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap;">
+        <!-- Filter tabs -->
+        <div style="display:flex;gap:4px;background:#f3f4f6;padding:4px;border-radius:8px;">
+          <button class="ti-filter-tab active" data-status="all"
+            style="padding:5px 14px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:#111827;box-shadow:0 1px 3px rgba(0,0,0,.1);">All</button>
+          <button class="ti-filter-tab" data-status="pending"
+            style="padding:5px 14px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:transparent;color:#6b7280;">Pending</button>
+          <button class="ti-filter-tab" data-status="in_progress"
+            style="padding:5px 14px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:transparent;color:#6b7280;">In Progress</button>
+          <button class="ti-filter-tab" data-status="completed"
+            style="padding:5px 14px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:transparent;color:#6b7280;">Completed</button>
+        </div>
+
+        <span id="techIssuesTotalCount" style="font-size:13px;color:#6b7280;font-weight:500;"></span>
+
+        <button id="tiRefreshBtn"
+          style="margin-left:auto;padding:6px 14px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:7px;font-size:12px;font-weight:600;color:#374151;cursor:pointer;">
+          ↺ Refresh
+        </button>
+      </div>
+
+      <!-- Legend -->
+      <div style="display:flex;gap:14px;margin-bottom:14px;flex-wrap:wrap;">
+        <span style="font-size:11.5px;color:#6b7280;display:flex;align-items:center;gap:5px;">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b;"></span>Pending — awaiting triage
+        </span>
+        <span style="font-size:11.5px;color:#6b7280;display:flex;align-items:center;gap:5px;">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#2563eb;"></span>In Progress — being investigated
+        </span>
+        <span style="font-size:11.5px;color:#6b7280;display:flex;align-items:center;gap:5px;">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#10b981;"></span>Completed — resolved
+        </span>
+      </div>
+
+      <!-- Table -->
+      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
+        <div id="techIssuesTable"></div>
+      </div>
+
+      <!-- Pagination -->
+      <div id="techIssuesPagin" style="margin-top:14px;display:flex;justify-content:center;gap:4px;flex-wrap:wrap;"></div>
+    </div>
+  </section>
+
   <!-- ── SCENARIO LIBRARY PAGE ── -->
   <section class="page" id="page-promptlibrary">
     <div class="sl-page">
@@ -1049,20 +1127,12 @@
             <p class="sl-header-subtitle">Browse by group, filter by category, or search across all.</p>
           </div>
           <div class="sl-header-actions">
-            <input type="search" id="slSearch" class="sl-search" placeholder="Search scenarios, roles, prompts…" aria-label="Search scenarios">
-            <!-- Intent search — applies ONLY on Enter or Apply click (not on
-                 every keystroke). Matches the typed intent against each
-                 scenario's task_type / category / mega_group / phase fields
-                 so users can ask "is there already a scenario for X?" without
-                 the live-filter interrupting them mid-typing. -->
             <div style="display:flex;align-items:center;gap:4px;">
-              <input type="search" id="slIntentSearch" class="sl-search"
-                     placeholder="Describe what you want to do… (Enter)"
-                     aria-label="Search scenarios by intent"
-                     title="Type what you're trying to do in plain language — e.g. 'converting meeting transcripts into RICEF documents'. Press Enter to find the closest-matching scenarios."
+              <input type="search" id="slSearch" class="sl-search"
+                     placeholder="Search scenarios, roles, prompts…"
+                     aria-label="Search scenarios"
                      style="min-width:260px;">
               <button class="sl-upload-btn" id="slIntentSearchBtn" type="button"
-                      title="Apply intent filter"
                       style="background:transparent;color:var(--primary-dark);border:1.5px solid var(--blue-200);padding:8px 12px;"
                       onmouseover="this.style.background='var(--primary-pale)';"
                       onmouseout="this.style.background='transparent';">
@@ -2288,7 +2358,7 @@
   .pz-modal {
     z-index:12001; background:#fff; border-radius:16px;
     display:none; flex-direction:column;
-    width:min(92vw, 680px); max-height:88vh;
+    width:min(92vw, 680px); height:min(88vh, 640px);
     position:fixed; top:50%; left:50%;
     transform:translate(-50%,-50%) scale(.96);
     box-shadow:0 24px 64px rgba(0,50,140,0.22);
@@ -2549,9 +2619,8 @@
 
   <!-- Footer -->
   <div class="pz-footer">
-    <button class="pz-btn pz-btn-secondary" id="pzCancelBtn">Cancel</button>
     <span id="pzSaveNote" class="pz-save-note"></span>
-    <button class="pz-btn pz-btn-primary"   id="pzSaveBtn">Save Preferences</button>
+    <button class="pz-btn pz-btn-primary" id="pzSaveBtn">Save Preferences</button>
   </div>
 
 </div><!-- /#pzModal -->
@@ -2566,8 +2635,14 @@
 <script src="/static/js/tool_editor.js"></script>
 <script src="/static/js/admin_scenarios.js"></script>
 <script src="/static/js/personalization.js"></script>
+<script src="/static/js/tech_issues.js"></script>
 <script src="/static/js/auth.js"></script>
 
 </div><!-- /#appShell -->
+
+<style>
+  /* Unify scenario card button hover — copy matches generate (blue, not green) */
+  .sl-btn-copy:hover { border-color: var(--sl-win,#3b82f6) !important; color: var(--sl-win,#3b82f6) !important; background: rgba(59,130,246,0.06) !important; }
+</style>
 </body>
 </html>

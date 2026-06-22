@@ -56,10 +56,61 @@
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
-  function _loadFavorites() {
+  /* ── Favorites — server-backed (Azure SQL) with localStorage fallback ── */
+
+  function _loadFavoritesFromLocal() {
     try { SL_FAVORITES = JSON.parse(localStorage.getItem(_favKey()) || '[]'); } catch { SL_FAVORITES = []; }
   }
-  function _saveFavorites() { localStorage.setItem(_favKey(), JSON.stringify(SL_FAVORITES)); }
+
+  function _cacheFavoritesLocally() {
+    try { localStorage.setItem(_favKey(), JSON.stringify(SL_FAVORITES)); } catch {}
+  }
+
+  async function _fetchFavoritesFromServer() {
+    const email = _sessionEmail();
+    if (!email) { _loadFavoritesFromLocal(); return; }
+    try {
+      const res = await fetch(`/api/user-saved-scenarios?user_email=${encodeURIComponent(email)}`);
+      if (res.ok) {
+        SL_FAVORITES = (await res.json()).favorites || [];
+        _cacheFavoritesLocally();
+      } else {
+        _loadFavoritesFromLocal();
+      }
+    } catch {
+      _loadFavoritesFromLocal();
+    }
+  }
+
+  function _loadFavorites() {
+    // Sync read from localStorage (used for immediate renders)
+    _loadFavoritesFromLocal();
+  }
+
+  async function _addFavoriteToServer(entry) {
+    const email = _sessionEmail();
+    if (!email) return;
+    try {
+      await fetch('/api/user-saved-scenarios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_email: email, ...entry }),
+      });
+    } catch {}
+  }
+
+  async function _removeFavoriteFromServer(title) {
+    const email = _sessionEmail();
+    if (!email) return;
+    try {
+      await fetch('/api/user-saved-scenarios', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_email: email, title }),
+      });
+    } catch {}
+  }
+
   function _isFav(title)    { return SL_FAVORITES.some(f => f.title === title); }
   function _updateFavoritesTabVisibility() {
     const tab = document.getElementById('slFavoritesTab');
@@ -146,35 +197,44 @@
   }
 
   /* ── Intent score for one scenario against pre-tokenized query ──
-     Concatenates all searchable fields into one haystack, then counts how
-     many of the query tokens appear as substrings. Title hits get a small
-     boost so an exact title-match floats to the top, but the threshold
-     itself uses the raw token-hit count. */
-  function _intentScore(s, tokens) {
+     Concatenates all searchable fields into one haystack. Each matching token
+     contributes its IDF weight (rare tokens score more than common ones).
+     A title-match adds an extra 50 % of the token's IDF weight so precise
+     title hits float to the top of the ranked list. */
+  function _intentScore(s, tokens, idfWeights) {
     if (!tokens.length) return 0;
     const hay = [
       s.title, s.scenario, s.task_type, s.category,
       s.mega_group, s.phase, s.persona,
     ].map(v => (v || '').toLowerCase()).join(' \u0001 ');
     const titleLower = (s.title || '').toLowerCase();
-    let hits = 0, boost = 0;
+    let score = 0;
     for (const t of tokens) {
       if (hay.includes(t)) {
-        hits++;
-        if (titleLower.includes(t)) boost += 0.5;   // title-match floats to top
+        const w = idfWeights ? (idfWeights[t] || 1) : 1;
+        score += w;
+        if (titleLower.includes(t)) score += w * 0.5;
       }
     }
-    return hits === 0 ? 0 : hits + boost;
+    return score;
   }
 
-  /* Adaptive minimum-hit threshold — short queries are strict, long queries
-     stay permissive so users can paste a whole sentence and still see what
-     loosely matches. NEVER shown to the user. */
-  function _minHitsFor(tokenCount) {
-    if (tokenCount <= 1) return 1;
-    if (tokenCount <= 3) return 1;
-    if (tokenCount <= 6) return 2;
-    return Math.max(2, Math.floor(tokenCount * 0.3));
+  /* IDF weights — inverse-document-frequency for each query token across the
+     full SL_DATA corpus. Rare/specific tokens (e.g. "wricef", "ricef") get a
+     high weight; common tokens (e.g. "document", "create") get a low weight.
+     Formula: log((N+1) / (df+1)) + 1  (Scikit-learn smooth IDF convention). */
+  function _computeIdfWeights(tokens) {
+    const N = SL_DATA.length || 1;
+    const weights = {};
+    for (const t of tokens) {
+      const df = SL_DATA.reduce((c, s) => {
+        const hit = [s.title, s.scenario, s.task_type, s.category, s.mega_group, s.phase, s.persona]
+          .some(v => (v || '').toLowerCase().includes(t));
+        return c + (hit ? 1 : 0);
+      }, 0);
+      weights[t] = Math.log((N + 1) / (df + 1)) + 1;
+    }
+    return weights;
   }
 
   function _filteredScenarios() {
@@ -198,16 +258,23 @@
       return true;
     });
 
-    // ── 2. Intent fuzzy/token search — applied last so its sort wins. ──
+    // ── 2. Intent search — IDF-weighted scoring so specific/rare terms
+    //    (e.g. "wricef", "ricef") dominate the relevance score and generic
+    //    words ("document", "generate") contribute proportionally less.
+    //    Threshold: a scenario must score ≥ 45 % of the maximum possible
+    //    weighted score, ensuring only genuinely relevant items pass.
     if (SL_INTENT_SEARCH) {
-      const tokens  = _tokenize(SL_INTENT_SEARCH);
-      const minHits = _minHitsFor(tokens.length);
-      if (!tokens.length) return items;     // query was all stop-words → no-op
+      const tokens = _tokenize(SL_INTENT_SEARCH);
+      if (!tokens.length) return items;
+
+      const idfWeights = _computeIdfWeights(tokens);
+      const maxScore   = tokens.reduce((sum, t) => sum + (idfWeights[t] || 1), 0);
+      const threshold  = maxScore * 0.45;
+
       const scored = [];
       for (const s of items) {
-        const score = _intentScore(s, tokens);
-        // Compare integer hit-count against threshold (boost only affects sort).
-        if (Math.floor(score) >= minHits) scored.push({ s, score });
+        const score = _intentScore(s, tokens, idfWeights);
+        if (score >= threshold) scored.push({ s, score });
       }
       scored.sort((a, b) => b.score - a.score);
       return scored.map(x => x.s);
@@ -275,8 +342,8 @@
         SL_INTENT_SEARCH = '';
         const searchEl = document.getElementById('slSearch');
         if (searchEl) searchEl.value = '';
-        const intentEl = document.getElementById('slIntentSearch');
-        if (intentEl) intentEl.value = '';
+        const searchEl2 = document.getElementById('slSearch');
+        if (searchEl2) searchEl2.value = '';
         const roleEl = document.getElementById('slRoleFilter');
         if (roleEl) roleEl.value = '';
         renderAll();
@@ -316,8 +383,8 @@
         SL_INTENT_SEARCH = '';
         const searchEl = document.getElementById('slSearch');
         if (searchEl) searchEl.value = '';
-        const intentEl = document.getElementById('slIntentSearch');
-        if (intentEl) intentEl.value = '';
+        const searchEl2 = document.getElementById('slSearch');
+        if (searchEl2) searchEl2.value = '';
         const roleEl = document.getElementById('slRoleFilter');
         if (roleEl) roleEl.value = '';
         renderAll();
@@ -449,14 +516,24 @@
     _bindCardActions(grid);
   }
 
+  /* ── SVG icon helpers — consistent stroke-based icons ── */
+  const _SVG = {
+    generate: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+    copy:     `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>`,
+    bookmark: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>`,
+    bookmarkFilled: `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>`,
+  };
+
   /* ── Build card HTML ── */
   function _buildCard(s) {
     const fav     = _isFav(s.title);
     const preview = (s.scenario || '').length > 130
       ? (s.scenario || '').substring(0, 130) + '…'
       : (s.scenario || '');
+    const fullText = _esc(s.scenario || '');
     return `
       <div class="sl-card"
+        title="${fullText}"
         data-title="${encodeURIComponent(s.title || '')}"
         data-scenario="${encodeURIComponent(s.scenario || '')}"
         data-mega="${_esc(s.mega_group || '')}"
@@ -469,10 +546,10 @@
         <div class="sl-card-title">${_esc(s.title || '')}</div>
         <div class="sl-card-body">${_esc(preview)}</div>
         <div class="sl-card-actions">
-          <button class="sl-btn-generate">&#9889; Generate</button>
-          <button class="sl-btn-copy">&#128203; Copy</button>
-          <button class="sl-btn-fav ${fav ? 'sl-fav-saved' : ''}">
-            ${fav ? '&#9733; Saved' : '&#9734; Save'}
+          <button class="sl-btn-generate" style="display:inline-flex;align-items:center;gap:4px;">${_SVG.generate} Edit &amp; Generate</button>
+          <button class="sl-btn-copy"     style="display:inline-flex;align-items:center;gap:4px;">${_SVG.copy} Copy</button>
+          <button class="sl-btn-fav ${fav ? 'sl-fav-saved' : ''}" style="display:inline-flex;align-items:center;gap:4px;">
+            ${fav ? _SVG.bookmarkFilled + ' Saved' : _SVG.bookmark + ' Save'}
           </button>
         </div>
       </div>`;
@@ -511,14 +588,17 @@
         const idx      = SL_FAVORITES.findIndex(f => f.title === title);
         if (idx >= 0) {
           SL_FAVORITES.splice(idx, 1);
-          btn.innerHTML = '&#9734; Save';
+          btn.innerHTML = _SVG.bookmark + ' Save';
           btn.classList.remove('sl-fav-saved');
+          _removeFavoriteFromServer(title);
         } else {
-          SL_FAVORITES.push({ title, scenario, persona, mega_group: mega, category: cat });
-          btn.innerHTML = '&#9733; Saved';
+          const entry = { title, scenario, persona, mega_group: mega, category: cat };
+          SL_FAVORITES.push(entry);
+          btn.innerHTML = _SVG.bookmarkFilled + ' Saved';
           btn.classList.add('sl-fav-saved');
+          _addFavoriteToServer(entry);
         }
-        _saveFavorites();
+        _cacheFavoritesLocally();
       });
     });
   }
@@ -530,7 +610,6 @@
     const grid  = document.getElementById('slFavGrid');
     const empty = document.getElementById('slFavEmpty');
     if (!grid) return;
-    _loadFavorites();
 
     if (!SL_FAVORITES.length) {
       grid.innerHTML = '';
@@ -607,8 +686,11 @@
     if (mainEl)    mainEl.style.display    = 'none';
 
     try {
-      const res  = await fetch('/api/scenarios');
-      const data = await res.json();
+      const [scenRes] = await Promise.all([
+        fetch('/api/scenarios'),
+        _fetchFavoritesFromServer(),
+      ]);
+      const data = await scenRes.json();
       SL_DATA = data.scenarios || [];
     } catch (e) {
       SL_DATA = [];
@@ -644,40 +726,41 @@
      SEARCH
   ══════════════════════════════════════ */
   function initSearch() {
-    const inp = document.getElementById('slSearch');
+    /* ── Unified search ──
+       Typing → keyword live filter (instant substring match).
+       Apply button or Enter → intent filter (token-scored semantic match). */
+    const inp       = document.getElementById('slSearch');
+    const intentBtn = document.getElementById('slIntentSearchBtn');
+
     if (inp) {
       inp.addEventListener('input', () => {
+        SL_INTENT_SEARCH = '';
         SL_SEARCH = inp.value.trim();
         if (SL_SEARCH) { SL_ACTIVE_MEGA = 'all'; SL_ACTIVE_CAT = ''; SL_ACTIVE_ROLE = ''; SL_ACTIVE_PHASE = ''; }
         renderAll();
       });
-    }
 
-    /* ── Intent search ── applies ONLY on Enter or Apply-button click.
-       Typing alone does NOT re-render, so the user can finish composing
-       a multi-word intent before the filter runs. Empty value clears
-       the intent filter. */
-    const intentInp = document.getElementById('slIntentSearch');
-    const intentBtn = document.getElementById('slIntentSearchBtn');
-    const applyIntent = () => {
-      const v = (intentInp?.value || '').trim();
-      SL_INTENT_SEARCH = v;
-      // Reset sidebar/category filters so the intent search sees the
-      // full library — same behaviour as the keyword search above.
-      if (v) { SL_ACTIVE_MEGA = 'all'; SL_ACTIVE_CAT = ''; SL_ACTIVE_ROLE = ''; SL_ACTIVE_PHASE = ''; }
-      renderAll();
-    };
-    if (intentInp) {
-      intentInp.addEventListener('keydown', e => {
+      const applyIntent = () => {
+        const v = inp.value.trim();
+        SL_SEARCH = '';
+        SL_INTENT_SEARCH = v;
+        if (v) { SL_ACTIVE_MEGA = 'all'; SL_ACTIVE_CAT = ''; SL_ACTIVE_ROLE = ''; SL_ACTIVE_PHASE = ''; }
+        renderAll();
+      };
+
+      inp.addEventListener('keydown', e => {
         if (e.key === 'Enter') { e.preventDefault(); applyIntent(); }
       });
-      // Clearing the box (e.g. clicking the native 'x') should drop the
-      // filter immediately so users aren't stuck with stale results.
-      intentInp.addEventListener('search', () => {
-        if (!intentInp.value.trim()) applyIntent();
+      inp.addEventListener('search', () => {
+        if (!inp.value.trim()) {
+          SL_SEARCH = '';
+          SL_INTENT_SEARCH = '';
+          renderAll();
+        }
       });
+
+      if (intentBtn) intentBtn.addEventListener('click', applyIntent);
     }
-    if (intentBtn) intentBtn.addEventListener('click', applyIntent);
   }
 
   /* ══════════════════════════════════════
@@ -967,7 +1050,7 @@
      INIT
   ══════════════════════════════════════ */
   document.addEventListener('DOMContentLoaded', () => {
-    _loadFavorites();
+    _loadFavoritesFromLocal();  // sync read from cache for immediate render
     _updateFavoritesTabVisibility();
     initSubTabs();
     initSearch();
@@ -982,9 +1065,10 @@
     if (page && page.classList.contains('active')) loadScenarios();
   });
 
-  window.slLoadScenarios   = loadScenarios;
-  window.slRenderFavorites = renderFavorites;
-  window.slLoadFavorites   = _loadFavorites;
+  window.slLoadScenarios        = loadScenarios;
+  window.slRenderFavorites      = renderFavorites;
+  window.slLoadFavorites        = _loadFavoritesFromLocal;
+  window.slFetchFavoritesServer = _fetchFavoritesFromServer;
   window.slGetAllRoles     = () => {
     const seen = new Set();
     SL_DATA.forEach(s => {
