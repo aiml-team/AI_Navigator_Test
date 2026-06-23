@@ -11,8 +11,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi import Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-# ── OKTA-DISABLED ─ uncomment the next line to re-enable Okta SSO session cookie
-# from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
 from services.database import init_db
 from auth import init_navigator_tables
@@ -61,21 +60,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Enterprise AI Orchestrator v2", lifespan=lifespan)
 
-# ── OKTA-DISABLED ──────────────────────────────────────────────
-# SessionMiddleware — stores the authenticated user (set by /saml/acs)
-# in a signed cookie. Must be added BEFORE the router so request.session
-# is available inside the SAML endpoints.
-# To re-enable Okta SSO: uncomment this whole block AND the
-# `from starlette.middleware.sessions import SessionMiddleware` import above.
+# ── SessionMiddleware ──────────────────────────────────────────
+# Stores the authenticated user (set by /saml/acs) in a signed cookie.
+# Must be added BEFORE the router so request.session is available
+# inside the SAML endpoints.
 # ----------------------------------------------------------------
-# app.add_middleware(
-#     SessionMiddleware,
-#     secret_key=os.getenv("SESSION_SECRET_KEY", "change-me-in-production"),
-#     session_cookie="navigator_session",
-#     max_age=28800,           # 8 hours
-#     same_site="lax",         # required so Okta's POST to /saml/acs carries the cookie back
-#     https_only=False,        # set True in production behind HTTPS only
-# )
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("SESSION_SECRET_KEY", "change-me-in-production"),
+    session_cookie="navigator_session",
+    max_age=28800,           # 8 hours
+    same_site="lax",         # required so Okta's POST to /saml/acs carries the cookie back
+    https_only=False,        # set True in production behind HTTPS only
+)
 
 app.add_middleware(
     CORSMiddleware,

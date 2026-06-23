@@ -1,19 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════
    auth.js
-   ─ Authentication for AI Navigator.
-   ─ Currently in MANUAL EMAIL MODE (Okta disabled). Search this file
-     for "OKTA-DISABLED" to find every block that needs uncommenting
-     when restoring Okta SSO. Re-enable order:
-        1. routes/__init__.py  — saml_router import + include_router
-        2. main.py             — SessionMiddleware import + add_middleware
-        3. templates/index.html — Okta button block (delete email form)
-        4. THIS FILE           — uncomment Okta paths, remove manual handler
-        5. requirements.txt    — uncomment python3-saml/itsdangerous/redis
-   ─ Manual mode flow: email form → POST /api/auth/identify → save in
-     sessionStorage → render app shell.
-   ─ Original Okta flow (preserved in comments):
+   ─ Authentication for AI Navigator. Okta SSO is ENABLED.
+   ─ Flow:
         "Sign in with Okta" → /saml/login → Okta → /saml/acs →
-        ?sso=1 redirect → /api/auth/me → render app shell.
+        /?sso=1 redirect → /api/auth/me → render app shell.
+   ─ Logout: clears local + server session via /saml/logout.
 
    BOTH admin and user see:
      • Profile icon (hdrMenuWrap) with Sign Out only
@@ -236,18 +227,15 @@ ADMIN_ONLY.forEach(sel => {
     document.getElementById('hdrDropdown')?.classList.remove('open');
   }
 
-  /* ── logout → clear local session → reload ────────────────── */
+  /* ── logout → clear local session → server logout ─────────── */
   function logout() {
     clearSession();
-    /* OKTA-DISABLED ─ when Okta is on, redirect to server logout endpoint:
+    /* Okta SSO: redirect to server logout endpoint which clears the
+       server-side session cookie and bounces back to the login page. */
     window.location.href = '/saml/logout';
-    */
-    /* Manual-login mode: just reload to the login screen. */
-    window.location.href = '/';
   }
 
-  /* ── fetch user from server session (after Okta redirect) ───
-     OKTA-DISABLED ─ uncomment when Okta is re-enabled.
+  /* ── fetch user from server session (after Okta redirect) ── */
   async function fetchServerSession() {
     try {
       const res = await fetch('/api/auth/me');
@@ -255,46 +243,6 @@ ADMIN_ONLY.forEach(sel => {
       return await res.json();
     } catch {
       return null;
-    }
-  }
-  */
-
-  /* ── manual email-form login handler ──────────────────────── */
-  async function handleLogin(ev) {
-    ev.preventDefault();
-    const input  = document.getElementById('authEmailInput');
-    const errBox = document.getElementById('authError');
-    const email  = (input?.value || '').trim();
-
-    if (!email || !email.includes('@')) {
-      if (errBox) {
-        errBox.textContent = 'Please enter a valid email address.';
-        errBox.style.display = 'block';
-      }
-      return;
-    }
-    if (errBox) errBox.style.display = 'none';
-
-    try {
-      const fd = new FormData();
-      fd.append('email', email);
-      const res = await fetch('/api/auth/identify', { method: 'POST', body: fd });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || ('HTTP ' + res.status));
-      }
-      const user = await res.json();
-      if (!user || !user.email) throw new Error('Invalid login response.');
-      saveSession(user);
-      showApp(user);
-      if (typeof initRecentRuns === 'function') initRecentRuns();
-      if (typeof loadHistory === 'function') loadHistory();
-      window._personalization?.loadPrefs?.();
-    } catch (err) {
-      if (errBox) {
-        errBox.textContent = 'Login failed: ' + (err.message || err);
-        errBox.style.display = 'block';
-      }
     }
   }
 
@@ -308,10 +256,8 @@ ADMIN_ONLY.forEach(sel => {
       document.getElementById('hdrDropdown')?.classList.remove('open');
     });
 
-    /* Wire the manual email login form (OKTA-DISABLED fallback) */
-    document.getElementById('authForm')?.addEventListener('submit', handleLogin);
-
-    /* OKTA-DISABLED ─ Okta SSO boot path. Re-enable by uncommenting.
+    /* Okta SSO boot path — after /saml/acs redirects to /?sso=1, pull
+       the authenticated user from the server session and render the app. */
     const params = new URLSearchParams(window.location.search);
     const justLoggedIn = params.get('sso') === '1';
 
@@ -323,20 +269,27 @@ ADMIN_ONLY.forEach(sel => {
         showApp(serverUser);
         if (typeof initRecentRuns === 'function') initRecentRuns();
         if (typeof loadHistory === 'function') loadHistory();
+        window._personalization?.loadPrefs?.();
         return;
       }
     }
-    */
 
-    /* Tab-refresh: restore from sessionStorage if present.
-       OKTA-DISABLED ─ when Okta is on, also re-validate against /api/auth/me. */
+    /* Tab-refresh: restore from sessionStorage if present, and re-validate
+       against the server session so a logged-out user can't keep using
+       a stale local cache. */
     const cached = loadSession();
     if (cached && cached.email && cached.role) {
-      showApp(cached);
-      if (typeof initRecentRuns === 'function') initRecentRuns();
-      if (typeof loadHistory === 'function') loadHistory();
-      window._personalization?.loadPrefs?.();
-      return;
+      const serverUser = await fetchServerSession();
+      if (serverUser && serverUser.email) {
+        saveSession(serverUser);
+        showApp(serverUser);
+        if (typeof initRecentRuns === 'function') initRecentRuns();
+        if (typeof loadHistory === 'function') loadHistory();
+        window._personalization?.loadPrefs?.();
+        return;
+      }
+      /* Server session is gone — wipe the stale local cache. */
+      clearSession();
     }
 
     showLoginScreen();

@@ -17,7 +17,7 @@ openpyxl
 tavily-python
 pandas
 azure-storage-blob
-# ── OKTA-DISABLED ─ Okta SAML SSO deps (uncomment to re-enable) ─
-# python3-saml==1.16.0
-# itsdangerous==2.2.0
+# ── Okta SAML SSO deps ──────────────────────────────────────────
+python3-saml==1.16.0
+itsdangerous==2.2.0
 redis==5.2.1
