@@ -30,7 +30,11 @@ function getLoggedInEmail() {
   let selectedRating  = 0;
   let selectedIssues  = [];
   let currentAuditId  = '';
+  let currentTaskSource = '';   // 'scenario_library' | 'typed' | '' — used for the badge in the modal
   let selectedFiles   = [];
+  let currentScope    = 'general';  // 'general' | 'response'
+  let scopeLocked     = false;       // true → dropdown disabled, response-only mode
+  let generalLocked   = false;       // true → dropdown disabled, general-only mode
 
   function initForm() {
     formOverlay = document.getElementById('fbOverlay');
@@ -50,13 +54,115 @@ function getLoggedInEmail() {
     buildFormBody();
   }
 
-  function buildFormBody() {
+  function buildFormBody(existingFeedback) {
     if (!formBody) return;
     selectedFiles  = [];
-    selectedRating = 0;
-    selectedIssues = [];
+    selectedRating = existingFeedback?.rating || 0;
+    selectedIssues = existingFeedback?.issue_type
+      ? existingFeedback.issue_type.split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+
+    // Has an active response context (set by openForm before this runs)?
+    const hasResponseCtx = !!currentAuditId;
+    const initialScope   = currentScope || 'general';
+    const existingComment = existingFeedback?.comment || '';
+    const isEdit          = !!existingFeedback;
+    const submitLabel     = isEdit ? 'Update Feedback' : 'Submit Feedback';
+
+    // Three toggle-button modes:
+    //   1. lockedView      — opened from a per-response button (History row,
+    //                        response panel). Toggle disabled, response active.
+    //   2. generalLockedView — opened from the FAB on a page with NO response
+    //                        on screen. Toggle disabled, general active.
+    //   3. editable        — opened from the FAB on a page WITH a response on
+    //                        screen. Both buttons active, user can switch.
+    const lockedView        = scopeLocked   && hasResponseCtx;
+    const generalLockedView = generalLocked && !hasResponseCtx;
+
+    // Effective active scope for the toggle (respects locks).
+    let activeScope;
+    if (lockedView)              activeScope = 'response';
+    else if (generalLockedView)  activeScope = 'general';
+    else if (hasResponseCtx)     activeScope = (initialScope === 'general') ? 'general' : 'response';
+    else                         activeScope = 'general';
+    // Keep the module-level currentScope in sync with what the toggle shows.
+    currentScope = activeScope;
+
+    const toggleDisabled = (lockedView || generalLockedView);
+    // Show both buttons when the toggle is editable (has response ctx and no lock).
+    // In locked modes we only render the one active button so the intent is unambiguous.
+    const showResponseBtn = lockedView || hasResponseCtx;
+    const showGeneralBtn  = generalLockedView || (!scopeLocked && hasResponseCtx) || (!hasResponseCtx && !scopeLocked);
+
+    const scopeToggleHtml = `
+      <div id="fbScopeToggle" class="fb-scope-toggle${toggleDisabled ? ' is-locked' : ''}" role="tablist" aria-label="Feedback scope">
+        ${showResponseBtn ? `
+          <button type="button"
+                  class="fb-scope-toggle-btn${activeScope === 'response' ? ' active' : ''}"
+                  data-scope="response"
+                  role="tab"
+                  aria-selected="${activeScope === 'response' ? 'true' : 'false'}"
+                  ${toggleDisabled ? 'disabled' : ''}>
+            <span class="fb-scope-toggle-label">Current Response</span>
+          </button>` : ''}
+        ${showGeneralBtn ? `
+          <button type="button"
+                  class="fb-scope-toggle-btn${activeScope === 'general' ? ' active' : ''}"
+                  data-scope="general"
+                  role="tab"
+                  aria-selected="${activeScope === 'general' ? 'true' : 'false'}"
+                  ${toggleDisabled ? 'disabled' : ''}>
+            <span class="fb-scope-toggle-label">General Feedback</span>
+          </button>` : ''}
+      </div>
+      <!-- Hidden input keeps the previous DOM contract (#fbScopeSelect) alive
+           so any external code that reads the current scope from the form keeps
+           working. Not used for submit — submitFeedback() reads currentScope. -->
+      <input type="hidden" id="fbScopeSelect" value="${activeScope}"/>
+    `;
+
+    // Render the task-source badge for response-scope feedback so the user
+    // knows whether they're reviewing a Scenario Library task or their own
+    // typed task. Uses the shared helper from app.js when available.
+    // NOTE: The chip row and scope-hint containers are always rendered — we
+    // toggle their *visibility* (not display) when switching scopes so the
+    // modal keeps a constant height and doesn't visually "jump" between
+    // scope selections. See index.html .fb-scope-slot / .fb-hint-slot rules.
+    const _taskSourceChipHtml = (hasResponseCtx && currentTaskSource)
+      ? (typeof window._taskSourceBadge === 'function'
+          ? window._taskSourceBadge(currentTaskSource)
+          : `<span class="task-source-badge">${(currentTaskSource === 'scenario_library') ? 'From Library' : 'Custom Task'}</span>`)
+      : '';
+
+    // Scope-hint copy — one line per scope. Keeps the banner visible on both
+    // scopes so the modal height is stable regardless of the active toggle.
+    const responseHintHtml = lockedView
+      ? `🔒 You're giving feedback on a specific response. To leave general feedback about the app, close this and use the floating <strong>Feedback</strong> button at the bottom-right of any page.`
+      : `📌 This feedback will be attached to the response you're viewing and will appear in its history entry.`;
+    const generalHintHtml = generalLockedView
+      ? `🔒 You're sharing overall feedback about the app. To leave feedback on a specific response, generate or open one first, then click the <strong>Feedback</strong> button again.`
+      : `🌐 This feedback is about the app overall and won't be tied to a specific response.`;
+
+    // The chip row is only meaningful for response-scope feedback with a
+    // known task_source. When it wouldn't show anything (general scope, or
+    // no task_source), we still render the slot with visibility:hidden so
+    // the modal height doesn't change.
+    const chipRowVisible = (activeScope === 'response' && _taskSourceChipHtml);
 
     formBody.innerHTML = `
+      <div class="fb-field">
+        <label>Feedback Scope</label>
+        ${scopeToggleHtml}
+        <div id="fbTaskSourceChipRow" class="fb-scope-slot" style="visibility:${chipRowVisible ? 'visible' : 'hidden'};">
+          <span class="fb-scope-slot-label">Task origin:</span>
+          <span id="fbTaskSourceChip">${_taskSourceChipHtml || '<span class="task-source-badge task-source-own">placeholder</span>'}</span>
+        </div>
+        <div id="fbScopeHint" class="fb-scope-hint">
+          <span id="fbScopeHintResponse" style="display:${activeScope === 'response' ? 'inline' : 'none'};">${responseHintHtml}</span>
+          <span id="fbScopeHintGeneral"  style="display:${activeScope === 'general'  ? 'inline' : 'none'};">${generalHintHtml}</span>
+        </div>
+      </div>
+
       <div class="fb-field">
         <label>Email Address</label>
         <input type="email" id="fbEmail" value="${escFb(getLoggedInEmail())}" readonly/>
@@ -65,21 +171,21 @@ function getLoggedInEmail() {
       <div class="fb-field">
         <label>Rating <span style="color:#ef4444">*</span></label>
         <div class="fb-stars-row" id="fbStarsRow">
-          ${[1,2,3,4,5].map(n => `<span class="fb-star" data-val="${n}" role="button" aria-label="${n} star">★</span>`).join('')}
-          <span class="fb-star-label" id="fbStarLabel">Select a rating</span>
+          ${[1,2,3,4,5].map(n => `<span class="fb-star${n <= selectedRating ? ' active' : ''}" data-val="${n}" role="button" aria-label="${n} star">★</span>`).join('')}
+          <span class="fb-star-label" id="fbStarLabel" style="${selectedRating ? 'color:#f59e0b;' : ''}">${selectedRating ? STAR_LABELS[selectedRating] : 'Select a rating'}</span>
         </div>
       </div>
 
       <div class="fb-field">
         <label>Feedback Type</label>
         <div class="fb-issue-pills" id="fbIssuePills">
-          ${ISSUE_TYPES.map(t => `<button class="fb-pill" data-issue="${escFb(t)}">${escFb(t)}</button>`).join('')}
+          ${ISSUE_TYPES.map(t => `<button class="fb-pill${selectedIssues.includes(t) ? ' selected' : ''}" data-issue="${escFb(t)}">${escFb(t)}</button>`).join('')}
         </div>
       </div>
 
       <div class="fb-field">
         <label>Comments</label>
-        <textarea id="fbComment" placeholder="Tell us what you think — any detail helps…" maxlength="1000"></textarea>
+        <textarea id="fbComment" placeholder="Tell us what you think — any detail helps…" maxlength="1000">${escFb(existingComment)}</textarea>
       </div>
 
       <div class="fb-field">
@@ -94,10 +200,55 @@ function getLoggedInEmail() {
       </div>
 
       <div class="fb-submit-row">
-        <button class="fb-btn-cancel" id="fbCancelBtn2">Cancel</button>
-        <button class="fb-btn-submit" id="fbSubmitBtn" disabled>Submit Feedback</button>
+        <button type="button" class="fb-btn-cancel" id="fbCancelBtn2">Cancel</button>
+        <button type="button" class="fb-btn-submit" id="fbSubmitBtn" ${selectedRating ? '' : 'disabled'}>${submitLabel}</button>
       </div>
     `;
+
+    /* Scope toggle buttons — toggles audit_id + source on submit.
+       Replaces the old <select id="fbScopeSelect"> dropdown; a hidden input
+       with the same id is kept in the DOM as a legacy read-only mirror. */
+    const scopeHint      = formBody.querySelector('#fbScopeHint');
+    const scopeHidden    = formBody.querySelector('#fbScopeSelect');
+    const scopeToggleEl  = formBody.querySelector('#fbScopeToggle');
+    const scopeBtns      = scopeToggleEl ? scopeToggleEl.querySelectorAll('.fb-scope-toggle-btn') : [];
+
+    scopeBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.disabled) return;
+        const newScope = btn.dataset.scope;
+        if (!newScope || newScope === currentScope) return;
+        currentScope = newScope;
+        // Update visual state for both buttons.
+        scopeBtns.forEach(b => {
+          const isActive = b.dataset.scope === newScope;
+          b.classList.toggle('active', isActive);
+          b.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+        // Keep hidden input in sync for any legacy readers.
+        if (scopeHidden) scopeHidden.value = newScope;
+
+        // Swap the hint copy between response / general (both containers stay
+        // mounted; the outer banner is always visible so the modal height is
+        // stable). visibility: not display, for the same reason.
+        const hintR = formBody.querySelector('#fbScopeHintResponse');
+        const hintG = formBody.querySelector('#fbScopeHintGeneral');
+        if (hintR) hintR.style.display = (newScope === 'response') ? 'inline' : 'none';
+        if (hintG) hintG.style.display = (newScope === 'general')  ? 'inline' : 'none';
+
+        // Toggle the task-source chip row alongside the scope switch — keep
+        // the slot present via visibility:hidden so height stays constant.
+        const chipRow = formBody.querySelector('#fbTaskSourceChipRow');
+        if (chipRow) {
+          chipRow.style.visibility = (newScope === 'response' && currentTaskSource) ? 'visible' : 'hidden';
+        }
+
+        // When switching to "response", try to pre-fill from existing feedback for this audit.
+        if (newScope === 'response' && currentAuditId) {
+          _prefillFromAudit(currentAuditId);
+        }
+      });
+    });
 
     /* Stars */
     const stars = formBody.querySelectorAll('.fb-star');
@@ -219,10 +370,43 @@ function getLoggedInEmail() {
     if (btn) btn.disabled = selectedRating === 0;
   }
 
-  function openForm(auditId, initialRating) {
+  function openForm(auditId, initialRating, opts) {
+    // opts: { scope, existingFeedback, locked, generalLocked }
+    //   scope         = 'general' | 'response'  — initial dropdown selection
+    //   locked        = true → dropdown disabled, response-only mode.
+    //                          Used by per-response buttons (History row, etc.).
+    //   generalLocked = true → dropdown disabled, general-only mode.
+    //                          Used by the FAB when no response is on screen.
+    opts = opts || {};
     currentAuditId = auditId || '';
+    // Seed task_source from the caller's context (typically the current
+    // response on screen). The chip is refreshed once the server round-trip
+    // to /api/feedback/by-audit completes with the authoritative value.
+    currentTaskSource = (opts.taskSource
+      || (typeof window !== 'undefined' ? (window.currentTaskSource || '') : '')
+      || '').toString().toLowerCase();
     if (!formModal) return;
-    buildFormBody();
+
+    // Lock the scope when explicitly requested AND we have a response to attach to.
+    scopeLocked   = !!(opts.locked && currentAuditId);
+    // Lock to general when explicitly requested AND we have NO response.
+    generalLocked = !!(opts.generalLocked && !currentAuditId);
+
+    // Decide initial scope:
+    //   - locked → always 'response'
+    //   - explicit opts.scope wins
+    //   - else 'response' when we have an auditId (called from response button or history)
+    //   - else 'general'
+    if (scopeLocked) {
+      currentScope = 'response';
+    } else if (opts.scope === 'general' || opts.scope === 'response') {
+      currentScope = opts.scope;
+    } else {
+      currentScope = currentAuditId ? 'response' : 'general';
+    }
+
+    buildFormBody(opts.existingFeedback || null);
+
     if (initialRating && initialRating >= 1 && initialRating <= 5) {
       selectedRating = initialRating;
       const stars = formBody.querySelectorAll('.fb-star');
@@ -238,12 +422,50 @@ function getLoggedInEmail() {
     formBody.style.display = '';
     formOverlay.classList.add('open');
     formModal.classList.add('open');
-    setTimeout(() => formModal.querySelector('#fbEmail')?.focus(), 120);
+    // Focus the active toggle button so keyboard users land on the scope
+    // control (the old <select> used to hold focus here).
+    setTimeout(() => {
+      const activeBtn = formModal.querySelector('.fb-scope-toggle-btn.active:not([disabled])')
+                     || formModal.querySelector('.fb-scope-toggle-btn:not([disabled])');
+      activeBtn?.focus();
+    }, 120);
+
+    // If we opened in response scope and no prefill was provided, pull from server.
+    if (currentScope === 'response' && currentAuditId && !opts.existingFeedback) {
+      _prefillFromAudit(currentAuditId);
+    }
+  }
+
+  /* Fetch any saved feedback for this audit and re-render the form pre-filled.
+     Also updates the task-source chip from the authoritative audit_log value. */
+  async function _prefillFromAudit(auditId) {
+    try {
+      const res  = await fetch(`/api/feedback/by-audit/${encodeURIComponent(auditId)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+
+      // Server always returns task_source (top-level) — refresh our copy.
+      if (data && typeof data.task_source === 'string') {
+        currentTaskSource = data.task_source.toLowerCase();
+      }
+
+      if (data?.feedback) {
+        buildFormBody(data.feedback);
+      } else if (currentTaskSource) {
+        // No prior feedback but we did learn task_source — refresh the chip
+        // by re-rendering the form (cheap; preserves current field state).
+        buildFormBody(null);
+      }
+    } catch { /* silent */ }
   }
 
   function closeForm() {
     formOverlay?.classList.remove('open');
     formModal?.classList.remove('open');
+    // Reset both lock flags so the next open starts from a clean slate.
+    scopeLocked   = false;
+    generalLocked = false;
+    currentTaskSource = '';
   }
 
   async function submitFeedback() {
@@ -252,6 +474,10 @@ function getLoggedInEmail() {
     const comment = formBody.querySelector('#fbComment')?.value.trim() || '';
 
     if (!selectedRating) return;
+
+    // Decide audit_id + source based on current scope.
+    const auditIdToSend = currentScope === 'response' ? currentAuditId : '';
+    const sourceToSend  = currentScope === 'response' ? 'response'      : 'form';
 
     btn.disabled    = true;
     btn.textContent = 'Submitting…';
@@ -262,35 +488,55 @@ function getLoggedInEmail() {
       fd.append('rating',     selectedRating);
       fd.append('comment',    comment);
       fd.append('issue_type', selectedIssues.join(', '));
-      fd.append('audit_id',   currentAuditId);
-      fd.append('source',     'form');
+      fd.append('audit_id',   auditIdToSend);
+      fd.append('source',     sourceToSend);
       selectedFiles.forEach(f => fd.append('files', f, f.name));
 
       const res = await fetch('/api/feedback', { method: 'POST', body: fd });
       if (!res.ok) throw new Error('Server error');
       const result = await res.json();
 
-      formBody.style.display = 'none';
+      const _isTechnical = !!(result && result.triage && result.triage.is_technical);
 
-      // Re-submit callback — invoked when user selects "Different problem".
-      const onForceNew = async () => {
-        const fd2 = new FormData();
-        fd2.append('email',      email);
-        fd2.append('rating',     selectedRating);
-        fd2.append('comment',    comment);
-        fd2.append('issue_type', selectedIssues.join(', '));
-        fd2.append('audit_id',   currentAuditId);
-        fd2.append('source',     'form');
-        fd2.append('force_new',  'true');
-        selectedFiles.forEach(f => fd2.append('files', f, f.name));
-        const res2 = await fetch('/api/feedback', { method: 'POST', body: fd2 });
-        if (!res2.ok) throw new Error('Server error');
-        const result2 = await res2.json();
-        _applyTriageMessage(formSuccess, result2.triage);
-      };
+      if (_isTechnical) {
+        // Technical feedback needs the branching triage UI ("Same problem" /
+        // "Different problem" buttons) because the user must tell us whether
+        // this ties into an existing issue. Keep the existing overlay flow.
+        formBody.style.display = 'none';
 
-      _applyTriageMessage(formSuccess, result.triage, onForceNew);
-      formSuccess.classList.add('show');
+        // Re-submit callback — invoked when user selects "Different problem".
+        const onForceNew = async () => {
+          const fd2 = new FormData();
+          fd2.append('email',      email);
+          fd2.append('rating',     selectedRating);
+          fd2.append('comment',    comment);
+          fd2.append('issue_type', selectedIssues.join(', '));
+          fd2.append('audit_id',   auditIdToSend);
+          fd2.append('source',     sourceToSend);
+          fd2.append('force_new',  'true');
+          selectedFiles.forEach(f => fd2.append('files', f, f.name));
+          const res2 = await fetch('/api/feedback', { method: 'POST', body: fd2 });
+          if (!res2.ok) throw new Error('Server error');
+          const result2 = await res2.json();
+          _applyTriageMessage(formSuccess, result2.triage);
+        };
+
+        _applyTriageMessage(formSuccess, result.triage, onForceNew);
+        formSuccess.classList.add('show');
+        return;
+      }
+
+      // Non-technical (the common case): swap the Submit button in place with
+      // a green "✓ Submitted successfully" confirmation. Keep the form on
+      // screen — no overlay, no auto-close. The user closes the modal
+      // manually via Cancel or the ✕ close button.
+      btn.classList.add('fb-btn-submit-success');
+      btn.disabled    = true;
+      btn.textContent = '✓ Submitted successfully';
+      // Prevent accidental re-submission: unbind the click handler by
+      // cloning + swapping the node (safe idempotent).
+      const _fresh = btn.cloneNode(true);
+      btn.parentNode.replaceChild(_fresh, btn);
     } catch (err) {
       btn.disabled    = false;
       btn.textContent = 'Submit Feedback';
@@ -303,6 +549,22 @@ function getLoggedInEmail() {
   }
 
   window.openFeedbackForm = openForm;
+
+  /* Unified entry point: open the feedback form with optional response context.
+     - auditId: when provided, the dropdown defaults to "Current Response"
+     - existingFeedback: optional pre-fill (e.g. fetched from /api/feedback/by-audit)
+     - locked: when true (and auditId is set), the dropdown is locked to
+               "Feedback on This Response" — the user cannot switch to General.
+               Use this from per-response buttons (History row, response panel).
+     Falls back to "General Feedback" when no audit context is available. */
+  window.openUnifiedFeedback = function (auditId, existingFeedback, locked, taskSource) {
+    openForm(auditId || '', null, {
+      scope: auditId ? 'response' : 'general',
+      existingFeedback: existingFeedback || null,
+      locked: !!locked,
+      taskSource: taskSource || (existingFeedback && existingFeedback.task_source) || '',
+    });
+  };
 
   /* ── Triage success message helper (shared by both forms) ──
      onForceNew: optional async callback — called when the user chooses
@@ -521,7 +783,9 @@ function getLoggedInEmail() {
      FEEDBACK VIEWER MODAL
   ═══════════════════════════════════════ */
   let viewerOverlay, viewerModal, viewerBody;
-  let vPage = 1, vPerPage = 5, vTotal = 0;
+  // 30 rows per page — mirrors the History view's HISTORY_PER_PAGE constant
+  // (defined in app.js) so both dashboards page at the same rate.
+  let vPage = 1, vPerPage = 30, vTotal = 0;
   let vRating = 0, vSearch = '', vLoading = false;
   let vPeriod = 'week', vStartDate = '', vEndDate = '';
 
@@ -734,17 +998,42 @@ function openViewer() {
                 <tr>
                   <th>Rating</th>
                   <th>Email</th>
+                  <th>Task Source</th>
                   <th>Issue Type</th>
                   <th>Comment</th>
                   <th>Files</th>
                   <th>Date</th>
+                  <th>Response</th>
                 </tr>
               </thead>
               <tbody>
-                ${rows.map(r => `
+                ${rows.map(r => {
+                  // Response-specific feedbacks have an audit_id linking them
+                  // to a generation in the audit_log table. General/overall
+                  // app feedback has no audit_id — we leave the Response cell
+                  // empty for those rows (per requirement).
+                  const auditId = r.audit_id || '';
+                  const openCell = auditId
+                    ? `<button class="fbv-open-log-btn" data-audit="${escFbv(auditId)}" title="View the response this feedback was given on">Open</button>`
+                    : '<span style="color:#d1d5db;">—</span>';
+
+                  // Task source cell — only meaningful for response-specific
+                  // feedback (has an audit_id) AND when task_source was
+                  // captured at run time. Historical rows have an empty
+                  // task_source; those (and general feedback) show an em-dash.
+                  const taskSrc = (r.task_source || '').toLowerCase();
+                  const _badgeHtml = (auditId && typeof window._taskSourceBadge === 'function')
+                    ? window._taskSourceBadge(taskSrc)
+                    : '';
+                  const taskSourceCell = _badgeHtml
+                    ? _badgeHtml
+                    : '<span style="color:#d1d5db;">—</span>';
+
+                  return `
                   <tr>
                     <td><span class="fbv-stars-display">${renderStars(r.rating)}</span></td>
                     <td style="font-size:12.5px;color:#374151;">${escFbv(r.email || '—')}</td>
+                    <td>${taskSourceCell}</td>
                     <td>${r.issue_type ? `<span class="fbv-issue-pill">${escFbv(r.issue_type)}</span>` : '<span style="color:#d1d5db;">—</span>'}</td>
                     <td><div class="fbv-comment-text">${escFbv(r.comment || '—')}</div></td>
                     <td>
@@ -755,7 +1044,9 @@ function openViewer() {
                         : '<span style="color:#d1d5db;">—</span>'}
                     </td>
                     <td class="fbv-date-cell">${fmtDate(r.created_at)}</td>
-                  </tr>`).join('')}
+                    <td>${openCell}</td>
+                  </tr>`;
+                }).join('')}
               </tbody>
             </table>
           </div>
@@ -776,6 +1067,28 @@ function openViewer() {
 
     viewerBody.querySelectorAll('.fbv-view-files-btn').forEach(btn => {
       btn.addEventListener('click', () => openAttachmentViewer(btn.dataset.id));
+    });
+
+    /* "Open" button — only present on response-specific feedback rows.
+       Reuses the same openLogModal() the History "View" button uses, so
+       the admin sees the exact same audit log + saved feedback panel.
+       The Feedback Dashboard is intentionally LEFT OPEN behind the log
+       modal so the admin returns to it when they close the log — they
+       were browsing feedback rows, not navigating away from the page.
+       We lift the log modal above the dashboard via a CSS class so it
+       isn't hidden underneath (the dashboard sits at a very high z-index). */
+    viewerBody.querySelectorAll('.fbv-open-log-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const auditId = btn.dataset.audit;
+        if (!auditId) return;
+        const logModalEl = document.getElementById('logModal');
+        if (logModalEl) logModalEl.classList.add('fbv-log-elevated');
+        if (typeof window.openLogModal === 'function') {
+          window.openLogModal(auditId);
+        } else if (typeof openLogModal === 'function') {
+          openLogModal(auditId);
+        }
+      });
     });
   }
 
@@ -883,7 +1196,22 @@ function openViewer() {
     initViewer();
 
     document.querySelectorAll('.fb-open-form-trigger').forEach(el => {
-      el.addEventListener('click', e => { e.preventDefault(); openForm(''); });
+      el.addEventListener('click', e => {
+        e.preventDefault();
+        // Smart default + locking rules for the FAB:
+        //   • Response on screen → default to "Current Response", with
+        //     "General Feedback" as the secondary option. Dropdown EDITABLE
+        //     so the user can switch to General if they want to.
+        //   • No response       → default to "General Feedback".
+        //     Dropdown LOCKED — there's no response to attach to, so the
+        //     user shouldn't see a switchable choice.
+        const ctxAudit = (typeof window !== 'undefined' && window.currentAuditId) || '';
+        if (ctxAudit) {
+          openForm(ctxAudit, null, { scope: 'response' });
+        } else {
+          openForm('', null, { scope: 'general', generalLocked: true });
+        }
+      });
     });
   }
 

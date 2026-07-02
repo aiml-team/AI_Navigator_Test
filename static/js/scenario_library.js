@@ -24,6 +24,11 @@
     try { return (JSON.parse(sessionStorage.getItem('navigator_session')) || {}).email || ''; }
     catch { return ''; }
   }
+  function _sessionRole() {
+    try { return (JSON.parse(sessionStorage.getItem('navigator_session')) || {}).role || 'user'; }
+    catch { return 'user'; }
+  }
+  function _isAdmin() { return _sessionRole() === 'admin'; }
   function _favKey() {
     const email = _sessionEmail();
     return email ? `sl_favorites__${email}` : 'sl_favorites__guest';
@@ -524,27 +529,61 @@
     bookmarkFilled: `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>`,
   };
 
-  /* ── Build card HTML ── */
+  /* ── Build card HTML ──
+     The tile body now shows the AI-generated SUMMARY (not the raw scenario)
+     truncated to ~2-3 lines with a "…More" link that opens the full summary
+     modal.  Falls back to the raw scenario text if no summary is cached yet
+     (e.g. while bulk-summarize is still running on the server). */
   function _buildCard(s) {
-    const fav     = _isFav(s.title);
-    const preview = (s.scenario || '').length > 130
-      ? (s.scenario || '').substring(0, 130) + '…'
-      : (s.scenario || '');
-    const fullText = _esc(s.scenario || '');
+    const fav         = _isFav(s.title);
+    const summaryText = (s.summary || '').trim();
+    const hasSummary  = !!summaryText;
+
+    // Body source: prefer summary; fall back to raw scenario.
+    const bodySource = hasSummary ? summaryText : (s.scenario || '');
+    const PREVIEW_LEN = 160; // ~2-3 lines in the current tile width
+    const isTruncated = bodySource.length > PREVIEW_LEN;
+    const previewText = isTruncated
+      ? bodySource.substring(0, PREVIEW_LEN).replace(/\s+\S*$/, '') + '…'
+      : bodySource;
+
+    const moreLink = isTruncated || hasSummary
+      ? `<button type="button" class="sl-more-link">More</button>`
+      : '';
+
+    // Beta "is_tested" chip.
+    //   • Untested (is_tested !== 1): everyone sees an "Untested" chip.
+    //     Admins can click it to flip the scenario to Tested.
+    //   • Tested (is_tested === 1): regular users see nothing; admins see a
+    //     small "Tested" chip they can click to flip it back to Untested.
+    // The click affordance (`data-action="toggle-tested"`) is only wired up
+    // for admins; non-admins get a static informational chip.
+    const isTested = Number(s.is_tested) === 1;
+    const admin    = _isAdmin();
+    let betaChipHtml = '';
+    if (!isTested) {
+      betaChipHtml = `<span class="sl-beta-chip sl-untested${admin ? ' sl-beta-admin' : ''}"${admin ? ' data-action="toggle-tested" title="Click to mark as Tested"' : ' title="This scenario is still being tested"'}>Untested</span>`;
+    } else if (admin) {
+      betaChipHtml = `<span class="sl-beta-chip sl-tested sl-beta-admin" data-action="toggle-tested" title="Click to mark as Untested">Tested</span>`;
+    }
+
     return `
       <div class="sl-card"
-        title="${fullText}"
         data-title="${encodeURIComponent(s.title || '')}"
         data-scenario="${encodeURIComponent(s.scenario || '')}"
         data-mega="${_esc(s.mega_group || '')}"
         data-cat="${_esc(s.category || '')}"
         data-persona="${_esc(s.persona || '')}"
-        data-task-type="${_esc(s.task_type || '')}">
+        data-task-type="${_esc(s.task_type || '')}"
+        data-id="${_esc(s.id || '')}"
+        data-is-tested="${isTested ? 1 : 0}"
+        data-summary="${encodeURIComponent(s.summary || '')}">
         <div class="sl-card-meta">
           ${s.task_type ? `<span class="sl-card-persona">🏷 ${_esc(s.task_type)}</span>` : ''}
+          ${betaChipHtml}
         </div>
         <div class="sl-card-title">${_esc(s.title || '')}</div>
-        <div class="sl-card-body">${_esc(preview)}</div>
+        <div class="sl-card-body">${_esc(previewText)}${moreLink ? ' ' + moreLink : ''}</div>
         <div class="sl-card-actions">
           <button class="sl-btn-generate" style="display:inline-flex;align-items:center;gap:4px;">${_SVG.generate} Edit &amp; Generate</button>
           <button class="sl-btn-copy"     style="display:inline-flex;align-items:center;gap:4px;">${_SVG.copy} Copy</button>
@@ -564,7 +603,9 @@
         const scenario = decodeURIComponent(card.dataset.scenario);
         const persona  = card.dataset.persona || '';
         const taskType = card.dataset.taskType || '';
-        _openGenModal({ scenario, persona, taskType });
+        const scenarioId    = card.dataset.id || '';
+        const scenarioTitle = decodeURIComponent(card.dataset.title || '');
+        _openGenModal({ scenario, persona, taskType, scenarioId, scenarioTitle });
       });
     });
 
@@ -573,6 +614,109 @@
         e.stopPropagation();
         const scenario = decodeURIComponent(btn.closest('.sl-card').dataset.scenario);
         _copyText(scenario, btn);
+      });
+    });
+
+    /* "More" link — explicitly opens the summary modal.
+       Bound BEFORE the card-level handler so it can stop propagation. */
+    container.querySelectorAll('.sl-more-link').forEach(link => {
+      link.addEventListener('click', e => {
+        e.stopPropagation();
+        const card = link.closest('.sl-card');
+        if (!card) return;
+        const data = {
+          id:        card.dataset.id || '',
+          title:     decodeURIComponent(card.dataset.title || ''),
+          scenario:  decodeURIComponent(card.dataset.scenario || ''),
+          persona:   card.dataset.persona || '',
+          taskType:  card.dataset.taskType || '',
+          mega:      card.dataset.mega || '',
+          category:  card.dataset.cat || '',
+          summary:   decodeURIComponent(card.dataset.summary || ''),
+        };
+        _openSummaryModal(data, card);
+      });
+    });
+
+    /* Beta chip — admin-only toggle. Non-admins get a static chip (no
+       data-action) so the querySelectorAll below skips them. */
+    container.querySelectorAll('.sl-beta-chip.sl-beta-admin[data-action="toggle-tested"]').forEach(chip => {
+      chip.addEventListener('click', async e => {
+        e.stopPropagation();
+        e.preventDefault();
+        const card = chip.closest('.sl-card');
+        if (!card) return;
+        const scenarioId = card.dataset.id || '';
+        if (!scenarioId) return;
+        const currentTested = Number(card.dataset.isTested) === 1;
+        const newVal        = currentTested ? 0 : 1;
+
+        // Optimistic UI + guard against double-click.
+        if (chip.dataset.busy === '1') return;
+        chip.dataset.busy = '1';
+        const prevLabel  = chip.textContent;
+        const prevClass  = chip.className;
+        chip.textContent = newVal ? 'Marking Tested…' : 'Marking Untested…';
+        chip.style.opacity = '0.7';
+
+        try {
+          const res = await fetch(`/api/admin/scenarios/${encodeURIComponent(scenarioId)}/tested`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ is_tested: newVal }),
+          });
+          if (!res.ok) throw new Error(await res.text());
+
+          // Update chip in place and update the card dataset so subsequent
+          // clicks toggle correctly without a full re-render.
+          card.dataset.isTested = String(newVal);
+          if (newVal === 1) {
+            chip.textContent = 'Tested';
+            chip.className   = 'sl-beta-chip sl-tested sl-beta-admin';
+            chip.title       = 'Click to mark as Untested';
+          } else {
+            chip.textContent = 'Untested';
+            chip.className   = 'sl-beta-chip sl-untested sl-beta-admin';
+            chip.title       = 'Click to mark as Tested';
+          }
+          chip.setAttribute('data-action', 'toggle-tested');
+
+          // Also update the SL_DATA in-memory copy so a re-render from a
+          // filter/search stays in sync.
+          if (typeof SL_DATA !== 'undefined' && Array.isArray(SL_DATA)) {
+            const entry = SL_DATA.find(x => x && x.id === scenarioId);
+            if (entry) entry.is_tested = newVal;
+          }
+        } catch (err) {
+          // Roll back on failure.
+          chip.textContent = prevLabel;
+          chip.className   = prevClass;
+          if (typeof _toast === 'function') _toast('Could not update Tested flag', 'error');
+          else console.error('[scenario_library] toggle-tested failed:', err);
+        } finally {
+          chip.style.opacity = '';
+          chip.dataset.busy  = '';
+        }
+      });
+    });
+
+    /* Card-level click — also opens the summary modal.
+       Ignore clicks on the action buttons and the More link
+       (they each handle their own actions). */
+    container.querySelectorAll('.sl-card').forEach(card => {
+      card.addEventListener('click', e => {
+        if (e.target.closest('.sl-btn-generate, .sl-btn-copy, .sl-btn-fav, .sl-more-link, .sl-beta-chip')) return;
+        const data = {
+          id:        card.dataset.id || '',
+          title:     decodeURIComponent(card.dataset.title || ''),
+          scenario:  decodeURIComponent(card.dataset.scenario || ''),
+          persona:   card.dataset.persona || '',
+          taskType:  card.dataset.taskType || '',
+          mega:      card.dataset.mega || '',
+          category:  card.dataset.cat || '',
+          summary:   decodeURIComponent(card.dataset.summary || ''),
+        };
+        _openSummaryModal(data, card);
       });
     });
 
@@ -635,8 +779,68 @@
     if (badge) badge.textContent = SL_DATA.length;
   }
 
+  /* Detects "user opened the scenario review modal, then closed it without
+     clicking Confirm" and clears the pending flag so it can't leak into a
+     later typed run. Attaches a one-shot MutationObserver + a one-shot
+     click listener on the confirm button. */
+  function _watchReviewModalForAbandon() {
+    const modal      = document.getElementById('scenarioGenModal');
+    const confirmBtn = document.getElementById('btnConfirmScenarioGen');
+    if (!modal) return;
+
+    // If confirm is clicked, remember it so we DON'T clear on close.
+    let confirmed = false;
+    const onConfirm = () => { confirmed = true; };
+    confirmBtn?.addEventListener('click', onConfirm, { once: true, capture: true });
+
+    // Wait until the modal is actually shown (open class), then watch for it
+    // to lose the open class.
+    const observer = new MutationObserver(() => {
+      if (!modal.classList.contains('open')) {
+        // Modal is now closed. Clean up regardless of outcome.
+        observer.disconnect();
+        confirmBtn?.removeEventListener('click', onConfirm, { capture: true });
+        // Only clear the flag if the user did NOT confirm — a confirmed run
+        // is already in flight and needs the flag intact.
+        if (!confirmed && window._pendingTaskSource === 'scenario_library') {
+          window._pendingTaskSource    = null;
+          window._pendingScenarioId    = null;
+          window._pendingScenarioTitle = null;
+        }
+      }
+    });
+
+    // Start observing once the modal has opened. Because open is async (the
+    // caller opens on a timer), wait a tick to attach.
+    setTimeout(() => {
+      if (modal.classList.contains('open')) {
+        observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
+      } else {
+        // Never opened — nothing to watch. Clean up the confirm listener.
+        confirmBtn?.removeEventListener('click', onConfirm, { capture: true });
+      }
+    }, 50);
+  }
+
   /* ── Generate modal ── */
-  function _openGenModal({ scenario, persona, taskType }) {
+  function _openGenModal({ scenario, persona, taskType, scenarioId, scenarioTitle }) {
+    // Flag the upcoming /api/run call as originating from the Scenario Library
+    // so it gets a "From Library" badge in History + Feedback. Even if the
+    // user edits the text in the review modal before generating, it still
+    // counts as "From Library" — they started there.
+    //
+    // _runGenerate consumes and clears this on the next run.
+    // _chatSend clears it too, so if the user abandons the review modal and
+    // types their own prompt later, that run is correctly tagged as typed.
+    // Belt-and-suspenders: watch the review modal for close-without-confirm
+    // and clear the flag then as well.
+    window._pendingTaskSource   = 'scenario_library';
+    // Stash the scenario id + title alongside the task-source flag so
+    // _runGenerate (in app.js) can forward them to /api/run. Empty strings
+    // are fine — the backend blanks them for typed runs anyway.
+    window._pendingScenarioId    = (scenarioId    || '').toString();
+    window._pendingScenarioTitle = (scenarioTitle || '').toString();
+    _watchReviewModalForAbandon();
     if (typeof plOpenScenarioGenModal === 'function') {
       plOpenScenarioGenModal({ body: scenario, activeRole: persona || null, activeTaskType: taskType || null });
       return;
@@ -650,6 +854,187 @@
       textarea.dispatchEvent(new Event('input'));
     }
     window.scrollTo(0, 0);
+  }
+
+  /* ══════════════════════════════════════
+     SCENARIO SUMMARY MODAL
+     Opens on card click. Shows title + persona + LLM-generated summary.
+     Caches summary on the card's data attribute and in SL_DATA so reopening
+     is instant. Wires "Edit & Generate" to the existing _openGenModal flow.
+  ══════════════════════════════════════ */
+  let _ssmCurrent = null;   // { id, title, scenario, persona, taskType, ... }
+  let _ssmWired   = false;
+  let _ssmCardRef = null;   // DOM ref to the card so we can update its data-summary
+
+  function _ssmEls() {
+    return {
+      // #ssmOverlay is the .modal-overlay wrapper; clicking its blank area closes.
+      overlay:    document.getElementById('ssmOverlay'),
+      // #ssmModal is the inner .modal box (used for clicks-inside detection).
+      modal:      document.getElementById('ssmModal'),
+      title:      document.getElementById('ssmTitle'),
+      personaChip:document.getElementById('ssmPersonaChip'),
+      taskChip:   document.getElementById('ssmTaskChip'),
+      loading:    document.getElementById('ssmLoading'),
+      text:       document.getElementById('ssmSummaryText'),
+      error:      document.getElementById('ssmError'),
+      closeBtn:   document.getElementById('ssmCloseBtn'),
+      cancelBtn:  document.getElementById('ssmCancelBtn'),
+      generateBtn:document.getElementById('ssmGenerateBtn'),
+    };
+  }
+
+  function _ssmClose() {
+    const e = _ssmEls();
+    if (!e.overlay) return;
+    // Standard .modal-overlay toggles via the .open class on the overlay only.
+    e.overlay.classList.remove('open');
+    if (e.modal) e.modal.setAttribute('aria-hidden', 'true');
+    _ssmCurrent = null;
+    _ssmCardRef = null;
+  }
+
+  function _ssmWireOnce() {
+    if (_ssmWired) return;
+    const e = _ssmEls();
+    if (!e.overlay) return;
+
+    e.closeBtn?.addEventListener('click', _ssmClose);
+    e.cancelBtn?.addEventListener('click', _ssmClose);
+
+    // Click on the dim backdrop (overlay itself) closes; clicks inside the
+    // .modal child do NOT close.
+    e.overlay.addEventListener('click', ev => {
+      if (ev.target === e.overlay) _ssmClose();
+    });
+
+    e.generateBtn?.addEventListener('click', () => {
+      if (!_ssmCurrent) return;
+      const cur = _ssmCurrent;
+      _ssmClose();
+      _openGenModal({
+        scenario:      cur.scenario,
+        persona:       cur.persona,
+        taskType:      cur.taskType,
+        scenarioId:    cur.id    || '',
+        scenarioTitle: cur.title || '',
+      });
+    });
+
+    document.addEventListener('keydown', ev => {
+      if (ev.key === 'Escape' && e.overlay.classList.contains('open')) _ssmClose();
+    });
+
+    _ssmWired = true;
+  }
+
+  function _openSummaryModal(data, cardEl) {
+    _ssmWireOnce();
+    const e = _ssmEls();
+    if (!e.overlay) {
+      // Fallback: if the modal HTML isn't present for some reason, go straight to generate.
+      _openGenModal({ scenario: data.scenario, persona: data.persona, taskType: data.taskType, scenarioId: data.id || '', scenarioTitle: data.title || '' });
+      return;
+    }
+
+    _ssmCurrent = data;
+    _ssmCardRef = cardEl || null;
+
+    // Header
+    e.title.textContent = data.title || 'Scenario Summary';
+
+    // Meta chips
+    if (data.persona) {
+      e.personaChip.textContent = '👤 ' + data.persona;
+      e.personaChip.style.display = '';
+    } else {
+      e.personaChip.style.display = 'none';
+    }
+    if (data.taskType) {
+      e.taskChip.textContent = '🏷 ' + data.taskType;
+      e.taskChip.style.display = '';
+    } else {
+      e.taskChip.style.display = 'none';
+    }
+
+    // Reset body state
+    e.text.style.display    = 'none';
+    e.error.style.display   = 'none';
+    e.text.textContent      = '';
+    e.error.textContent     = '';
+    e.loading.style.display = 'flex';
+
+    // Open — only the overlay needs the .open class with the standard chrome.
+    e.overlay.classList.add('open');
+    if (e.modal) e.modal.setAttribute('aria-hidden', 'false');
+
+    // If we already have a cached summary on the card, show it instantly.
+    if (data.summary && data.summary.trim()) {
+      _ssmShowSummary(data.summary);
+      return;
+    }
+
+    // Otherwise fetch from the server.
+    _ssmFetchSummary(data);
+  }
+
+  function _ssmShowSummary(text) {
+    const e = _ssmEls();
+    e.loading.style.display = 'none';
+    e.error.style.display   = 'none';
+    e.text.textContent      = text;
+    e.text.style.display    = 'block';
+  }
+
+  function _ssmShowError(msg) {
+    const e = _ssmEls();
+    e.loading.style.display = 'none';
+    e.text.style.display    = 'none';
+    e.error.textContent     = msg || 'Could not generate a summary right now. You can still click "Edit & Generate" to open this scenario.';
+    e.error.style.display   = 'block';
+  }
+
+  async function _ssmFetchSummary(data) {
+    try {
+      const res = await fetch('/api/scenarios/summarize', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id:       data.id || '',
+          title:    data.title || '',
+          scenario: data.scenario || '',
+          persona:  data.persona || '',
+        }),
+      });
+      if (!res.ok) {
+        _ssmShowError();
+        return;
+      }
+      const payload = await res.json();
+      const summary = (payload && payload.summary) || '';
+
+      if (!summary) {
+        _ssmShowError();
+        return;
+      }
+
+      _ssmShowSummary(summary);
+
+      // Cache: update card dataset + SL_DATA entry so reopening is instant.
+      if (_ssmCardRef) {
+        _ssmCardRef.dataset.summary = encodeURIComponent(summary);
+      }
+      if (Array.isArray(SL_DATA)) {
+        for (const s of SL_DATA) {
+          const titleMatch = (s.title || '').toLowerCase() === (data.title || '').toLowerCase();
+          const idMatch    = data.id && s.id && s.id === data.id;
+          if (idMatch || titleMatch) { s.summary = summary; break; }
+        }
+      }
+      if (_ssmCurrent) _ssmCurrent.summary = summary;
+    } catch (err) {
+      _ssmShowError();
+    }
   }
 
   function _personaToRole(persona) {

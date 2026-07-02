@@ -27,8 +27,8 @@ def _save_scenarios_to_db(scenarios: list, source: str = "excel"):
         conn.commit()
         for s in scenarios:
             conn.execute(
-                "INSERT INTO scenarios (id, mega_group, category, phase, title, persona, scenario, task_type, source, created_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO scenarios (id, mega_group, category, phase, title, persona, scenario, task_type, source, created_at, summary) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     str(uuid.uuid4()),
                     s.get("mega_group", ""),
@@ -40,6 +40,7 @@ def _save_scenarios_to_db(scenarios: list, source: str = "excel"):
                     s.get("task_type", ""),
                     source,
                     datetime.utcnow().isoformat(),
+                    s.get("summary", ""),
                 ),
             )
         conn.commit()
@@ -53,12 +54,15 @@ def _load_scenarios_from_db() -> list:
     try:
         conn = get_db()
         rows = conn.execute(
-            "SELECT mega_group, category, phase, title, persona, scenario, task_type "
+            "SELECT id, mega_group, category, phase, title, persona, scenario, task_type, "
+            "ISNULL(summary, '') AS summary, "
+            "ISNULL(is_tested, 0) AS is_tested "
             "FROM scenarios ORDER BY source, created_at"
         ).fetchall()
         conn.close()
         return [
             {
+                "id":         r["id"]         or "",
                 "mega_group": r["mega_group"] or "",
                 "category":   r["category"]   or "",
                 "phase":      r["phase"]       or "",
@@ -66,6 +70,11 @@ def _load_scenarios_from_db() -> list:
                 "persona":    r["persona"]     or "",
                 "scenario":   r["scenario"]    or "",
                 "task_type":  r["task_type"]   or "",
+                "summary":    r["summary"]     or "",
+                # Beta flag: 0 = untested (default, chip visible), 1 = tested
+                # (chip hidden for regular users). Coerce None → 0 for
+                # historical rows that pre-date the column.
+                "is_tested":  int(r["is_tested"] or 0),
             }
             for r in rows
         ]
@@ -165,6 +174,7 @@ def _load_scenario_library_from_bytes(excel_bytes: bytes) -> list:
             "persona":    persona,
             "scenario":   scenario,
             "task_type":  task_type,
+            "summary":    "",
         })
 
     return scenarios

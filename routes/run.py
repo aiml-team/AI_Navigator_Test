@@ -47,6 +47,27 @@ async def run_orchestrator(req: RunRequest):
     # uniform key — eliminates @bs.nttdata.com vs @nttdata.com drift.
     stored_email = canonicalize_email(req.user_email or "")
 
+    # Task origin — trusts the frontend flag because it's the only reliable
+    # signal for "did the user pick from the Scenario Library?".
+    #   • The Scenario Library card sets req.task_source = 'scenario_library'
+    #     BEFORE the run — even if the user edits the text before generating,
+    #     it still counts as "From Library" because they started there.
+    #   • Every other entry point (chat typing, Prompt Library, Quick Actions,
+    #     History Regenerate) sends req.task_source = 'typed' or nothing.
+    # Normalised here so unknown values don't leak into the DB.
+    _raw_source = (req.task_source or "").strip().lower()
+    stored_task_source = "scenario_library" if _raw_source == "scenario_library" else "typed"
+
+    # Scenario provenance — only meaningful when the run came from the Scenario
+    # Library. For typed runs we blank both fields so historical semantics stay
+    # clean and the View modal doesn't accidentally show a stale title.
+    if stored_task_source == "scenario_library":
+        stored_scenario_id    = (req.scenario_id    or "").strip()[:64]
+        stored_scenario_title = (req.scenario_title or "").strip()[:500]
+    else:
+        stored_scenario_id    = ""
+        stored_scenario_title = ""
+
     conn = get_db()
     conn.execute(
         """INSERT INTO audit_log
@@ -54,8 +75,9 @@ async def run_orchestrator(req: RunRequest):
              recommended_tool, tool_reason, tool_confidence,
              policy_flags, retrieved_policies, final_prompt,
              prompt_version, model_used, output, token_estimate,
-             system_version, policy_blocked, policy_summary, role, user_email)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+             system_version, policy_blocked, policy_summary, role, user_email,
+             task_source, scenario_id, scenario_title)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             audit_id, datetime.utcnow().isoformat(),
             result["user_input"], result["intent"], result["industry"],
@@ -69,6 +91,9 @@ async def run_orchestrator(req: RunRequest):
             policy_summary,
             stored_role,
             stored_email,
+            stored_task_source,
+            stored_scenario_id,
+            stored_scenario_title,
         ),
     )
     conn.commit()
@@ -102,4 +127,5 @@ async def run_orchestrator(req: RunRequest):
         "role":              req.role,
         "task_type":         req.task_type,
         "data_sensitivity":  req.data_sensitivity,
+        "task_source":       stored_task_source,
     }

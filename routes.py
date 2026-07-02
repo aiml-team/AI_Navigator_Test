@@ -1672,42 +1672,49 @@ async def chat_summarize(req: ChatSummarizeRequest):
         }
 
 
-from pathlib import Path
-from fastapi.responses import Response
-
-@router.get("/saml/metadata")
-async def saml_metadata():
-    cert = Path("saml/sp.crt").read_text()
-    cert = cert.replace("-----BEGIN CERTIFICATE-----", "") \
-               .replace("-----END CERTIFICATE-----", "") \
-               .replace("\n", "").strip()
-
-    base_url = "https://ai-navigator-ashpbzhbcmgeerbt.northeurope-01.azurewebsites.net/"  # ← local for now
-
-    xml = f"""<?xml version="1.0"?>
-<md:EntityDescriptor
-    xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata"
-    xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
-    entityID="{base_url}/saml/metadata">
-  <md:SPSSODescriptor
-      AuthnRequestsSigned="false"
-      WantAssertionsSigned="true"
-      protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
-    <md:KeyDescriptor use="signing">
-      <ds:KeyInfo>
-        <ds:X509Data>
-          <ds:X509Certificate>{cert}</ds:X509Certificate>
-        </ds:X509Data>
-      </ds:KeyInfo>
-    </md:KeyDescriptor>
-    <md:NameIDFormat>urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress</md:NameIDFormat>
-    <md:AssertionConsumerService
-        Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
-        Location="{base_url}/saml/acs"
-        index="1"/>
-  </md:SPSSODescriptor>
-</md:EntityDescriptor>"""
-    return Response(content=xml, media_type="application/xml")
+# ──────────────────────────────────────────────────────────────────────────
+#  LEGACY /saml/metadata — kept commented out on purpose.
+#  Okta SSO is now served by routes/saml_routes.py which exposes the
+#  canonical /saml/metadata via python3-saml (SP settings from
+#  services/saml_service.py). Enabling this duplicate would cause a
+#  route collision. Preserved here for historical reference only.
+# ──────────────────────────────────────────────────────────────────────────
+# from pathlib import Path
+# from fastapi.responses import Response
+#
+# @router.get("/saml/metadata")
+# async def saml_metadata():
+#     cert = Path("saml/sp.crt").read_text()
+#     cert = cert.replace("-----BEGIN CERTIFICATE-----", "") \
+#                .replace("-----END CERTIFICATE-----", "") \
+#                .replace("\n", "").strip()
+#
+#     base_url = "https://ai-navigator-ashpbzhbcmgeerbt.northeurope-01.azurewebsites.net/"  # ← local for now
+#
+#     xml = f"""<?xml version="1.0"?>
+# <md:EntityDescriptor
+#     xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata"
+#     xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+#     entityID="{base_url}/saml/metadata">
+#   <md:SPSSODescriptor
+#       AuthnRequestsSigned="false"
+#       WantAssertionsSigned="true"
+#       protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
+#     <md:KeyDescriptor use="signing">
+#       <ds:KeyInfo>
+#         <ds:X509Data>
+#           <ds:X509Certificate>{cert}</ds:X509Certificate>
+#         </ds:X509Data>
+#       </ds:KeyInfo>
+#     </md:KeyDescriptor>
+#     <md:NameIDFormat>urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress</md:NameIDFormat>
+#     <md:AssertionConsumerService
+#         Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
+#         Location="{base_url}/saml/acs"
+#         index="1"/>
+#   </md:SPSSODescriptor>
+# </md:EntityDescriptor>"""
+#     return Response(content=xml, media_type="application/xml")
 
 
 # ══════════════════════════════════════════════════════════════════════════════

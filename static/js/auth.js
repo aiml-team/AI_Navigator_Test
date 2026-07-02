@@ -1,10 +1,18 @@
 /* ═══════════════════════════════════════════════════════════════
    auth.js
-   ─ Authentication for AI Navigator. Okta SSO is ENABLED.
-   ─ Flow:
-        "Sign in with Okta" → /saml/login → Okta → /saml/acs →
-        /?sso=1 redirect → /api/auth/me → render app shell.
-   ─ Logout: clears local + server session via /saml/logout.
+   ─ Authentication for AI Navigator.
+
+   ┌─────────────────────────────────────────────────────────────┐
+   │ OKTA SSO ENABLED — SAML flow is the primary login path.     │
+   │ Flow:                                                       │
+   │   user clicks "Sign in with Okta" → /saml/login →           │
+   │   Okta → POST /saml/acs → session cookie set →              │
+   │   redirect to /?sso=1 → JS calls /api/auth/me → app shell.  │
+   │ Logout: hits /saml/logout to clear the server session.      │
+   │                                                             │
+   │ The local email-login path (LOCAL LOGIN LEGACY) is kept     │
+   │ below in comments as a fallback — uncomment to restore.     │
+   └─────────────────────────────────────────────────────────────┘
 
    BOTH admin and user see:
      • Profile icon (hdrMenuWrap) with Sign Out only
@@ -227,15 +235,16 @@ ADMIN_ONLY.forEach(sel => {
     document.getElementById('hdrDropdown')?.classList.remove('open');
   }
 
-  /* ── logout → clear local session → server logout ─────────── */
+  /* ── logout → hit Okta SLO endpoint ───────────────────────── */
   function logout() {
     clearSession();
-    /* Okta SSO: redirect to server logout endpoint which clears the
-       server-side session cookie and bounces back to the login page. */
+    // OKTA SSO — clears server session and returns to /.
     window.location.href = '/saml/logout';
+    // LOCAL LOGIN LEGACY (disabled):
+    //   window.location.href = '/';
   }
 
-  /* ── fetch user from server session (after Okta redirect) ── */
+  /* ── Fetch user from server session (after /saml/acs) ─────── */
   async function fetchServerSession() {
     try {
       const res = await fetch('/api/auth/me');
@@ -243,6 +252,42 @@ ADMIN_ONLY.forEach(sel => {
       return await res.json();
     } catch {
       return null;
+    }
+  }
+
+  /* ── LOCAL LOGIN — POST /api/auth/identify ────────────────── */
+  async function localLogin(email) {
+    const errEl = document.getElementById('authError');
+    if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+
+    if (!email) {
+      if (errEl) { errEl.textContent = 'Please enter your email address.'; errEl.style.display = 'block'; }
+      return;
+    }
+
+    const submitBtn = document.getElementById('localLoginBtn');
+    const original  = submitBtn ? submitBtn.innerHTML : '';
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = 'Signing in…'; }
+
+    try {
+      const fd = new FormData();
+      fd.append('email', email.trim().toLowerCase());
+      const res = await fetch('/api/auth/identify', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || `Sign-in failed (${res.status})`);
+      }
+      const user = await res.json();
+      if (!user || !user.email) throw new Error('Invalid server response.');
+
+      saveSession(user);
+      showApp(user);
+      if (typeof initRecentRuns === 'function') initRecentRuns();
+      if (typeof loadHistory     === 'function') loadHistory();
+      window._personalization?.loadPrefs?.();
+    } catch (err) {
+      if (errEl) { errEl.textContent = err.message || 'Sign-in failed.'; errEl.style.display = 'block'; }
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = original; }
     }
   }
 
@@ -256,8 +301,24 @@ ADMIN_ONLY.forEach(sel => {
       document.getElementById('hdrDropdown')?.classList.remove('open');
     });
 
-    /* Okta SSO boot path — after /saml/acs redirects to /?sso=1, pull
-       the authenticated user from the server session and render the app. */
+    /* ── LOCAL LOGIN LEGACY (disabled) — form submit binding ───
+       Preserved so restoring the local email-login form + this
+       block re-enables /api/auth/identify without further changes.
+    ─────────────────────────────────────────────────────────────── */
+    // const loginForm = document.getElementById('localLoginForm');
+    // if (loginForm) {
+    //   loginForm.addEventListener('submit', (e) => {
+    //     e.preventDefault();
+    //     const emailInput = document.getElementById('localLoginEmail');
+    //     localLogin(emailInput ? emailInput.value : '');
+    //   });
+    // }
+
+    /* ── OKTA SSO boot path ────────────────────────────────────
+       After /saml/acs redirects to /?sso=1, pull the authenticated
+       user from the server session cookie set by the SAML ACS
+       endpoint, then strip the query param and render the app.
+    ─────────────────────────────────────────────────────────────── */
     const params = new URLSearchParams(window.location.search);
     const justLoggedIn = params.get('sso') === '1';
 
@@ -274,22 +335,17 @@ ADMIN_ONLY.forEach(sel => {
       }
     }
 
-    /* Tab-refresh: restore from sessionStorage if present, and re-validate
-       against the server session so a logged-out user can't keep using
-       a stale local cache. */
+    /* Tab-refresh: restore from sessionStorage if present.
+       The server session cookie is the source of truth after Okta
+       SSO, but we cache the user in sessionStorage for a snappy
+       reload experience within the same tab. */
     const cached = loadSession();
     if (cached && cached.email && cached.role) {
-      const serverUser = await fetchServerSession();
-      if (serverUser && serverUser.email) {
-        saveSession(serverUser);
-        showApp(serverUser);
-        if (typeof initRecentRuns === 'function') initRecentRuns();
-        if (typeof loadHistory === 'function') loadHistory();
-        window._personalization?.loadPrefs?.();
-        return;
-      }
-      /* Server session is gone — wipe the stale local cache. */
-      clearSession();
+      showApp(cached);
+      if (typeof initRecentRuns === 'function') initRecentRuns();
+      if (typeof loadHistory     === 'function') loadHistory();
+      window._personalization?.loadPrefs?.();
+      return;
     }
 
     showLoginScreen();

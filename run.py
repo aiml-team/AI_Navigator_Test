@@ -16,7 +16,7 @@ if __name__ == "__main__":
             "orchestrator.db",
             "static",
             "templates",
-            "saml",
+            "saml",  # OKTA SSO ENABLED — cert dir excluded from reload watching
             "*.xlsx",
         ],
     )

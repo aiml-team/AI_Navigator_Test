@@ -244,7 +244,51 @@ let currentTaskType    = 'general';
 let currentIntent      = 'general';
 let currentIndustry    = 'general';
 let currentTool        = '';
+let currentTaskSource  = 'typed';   // 'scenario_library' | 'typed'
 let _runAbortController = null;
+
+/* Set by the Scenario Library / Prompt Library / Quick Actions call sites
+   right before staging the chat. _runGenerate consumes and resets it so
+   subsequent typed prompts default to 'typed'. Exposed on window so
+   non-module scripts can flag their flows too. */
+window._pendingTaskSource = null;
+/* Scenario provenance staged alongside _pendingTaskSource by the Scenario
+   Library flow. Cleared on consume / typed input / review-modal abandon —
+   same lifetime as _pendingTaskSource. Empty string when unknown. */
+window._pendingScenarioId    = null;
+window._pendingScenarioTitle = null;
+
+/* Renders a small pill telling the user whether this task came from the
+   Scenario Library or was written by them. Used in History, Recent Runs,
+   Feedback Dashboard, and the Feedback modal.
+
+   Returns an EMPTY STRING for blank / unknown values so historical rows
+   (created before the flag was in place) render no badge at all. Only
+   the two explicit values 'scenario_library' and 'typed' produce a pill. */
+function _taskSourceBadge(taskSource) {
+  const src = (taskSource || '').trim().toLowerCase();
+  if (src === 'scenario_library') {
+    return `<span class="task-source-badge task-source-lib" title="Task selected from the Scenario Library">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-1px;margin-right:3px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      From Library</span>`;
+  }
+  if (src === 'typed') {
+    return `<span class="task-source-badge task-source-own" title="Task written by the user">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-1px;margin-right:3px;"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      Custom Task</span>`;
+  }
+  // Blank / unknown → no badge. Historical rows fall here.
+  return '';
+}
+window._taskSourceBadge = _taskSourceBadge;
+
+function _taskSourceLabel(taskSource) {
+  const src = (taskSource || '').trim().toLowerCase();
+  if (src === 'scenario_library') return 'From Library';
+  if (src === 'typed')            return 'Custom Task';
+  return '';
+}
+window._taskSourceLabel = _taskSourceLabel;
 
 function _getSessionEmail() {
   try { return (JSON.parse(sessionStorage.getItem('navigator_session')) || {}).email || ''; }
@@ -800,6 +844,24 @@ async function _runGenerate(input, role, taskType) {
   goToStep(2);
   startProcessingAnimation();
 
+  // Consume the pending task source (set by Scenario Library flows).
+  // Default to 'typed' when nothing was staged.
+  const _taskSource = (window._pendingTaskSource === 'scenario_library')
+    ? 'scenario_library'
+    : 'typed';
+  // Grab scenario id/title staged alongside _pendingTaskSource. Only
+  // forwarded when the run actually came from the Scenario Library — for
+  // typed runs we send empty strings so the backend blanks the columns.
+  const _scenarioId    = (_taskSource === 'scenario_library')
+    ? (window._pendingScenarioId    || '')
+    : '';
+  const _scenarioTitle = (_taskSource === 'scenario_library')
+    ? (window._pendingScenarioTitle || '')
+    : '';
+  window._pendingTaskSource    = null;
+  window._pendingScenarioId    = null;
+  window._pendingScenarioTitle = null;
+
   try {
     const res = await fetch(API.run, {
       method:  'POST',
@@ -812,6 +874,9 @@ async function _runGenerate(input, role, taskType) {
         data_sensitivity:         'general',
         user_email:               _getSessionEmail(),
         skip_tool_recommendation: !_toolRecEnabled,
+        task_source:              _taskSource,
+        scenario_id:              _scenarioId,
+        scenario_title:           _scenarioTitle,
       }),
     });
 
@@ -823,6 +888,7 @@ async function _runGenerate(input, role, taskType) {
     const data = await res.json();
 
     currentAuditId  = data.audit_id;
+    window.currentAuditId = currentAuditId;  // expose for feedback FAB context
     currentOutput   = data.output           || '';
     currentCorlo    = data.corlo_prompt     || '';
     currentInput    = input;
@@ -831,6 +897,8 @@ async function _runGenerate(input, role, taskType) {
     currentIntent   = data.intent           || 'general';
     currentIndustry = data.industry         || 'general';
     currentTool     = data.recommended_tool || '';
+    currentTaskSource = data.task_source    || _taskSource;
+    window.currentTaskSource = currentTaskSource;  // for feedback modal badge
 
     await finishProcessingAnimation();
     renderResult(data);
@@ -854,6 +922,7 @@ function clearHomeResponseOnly() {
 
   // Clear result state
   currentAuditId = null;
+  window.currentAuditId = null;
   currentOutput = '';
   currentCorlo = '';
   currentInput = '';
@@ -905,6 +974,7 @@ function resetToStep1() {
   _closeClarModal();
   cancelPromptEdit();
   currentAuditId     = null;
+  window.currentAuditId = null;
   currentOutput      = '';
   currentCorlo       = '';
   currentInput       = '';
@@ -1516,23 +1586,32 @@ function initFeedback() {
 }
 
 async function openResponseFeedback(auditId) {
+  // Per-response entry: opens the Feedback form locked to "This Response".
+  // Used by the History row's "Provide Feedback on this Response" button.
+  // The user cannot switch to General Feedback from here — they must use the
+  // global Feedback FAB for that.
+  // Pre-fills if a feedback row already exists for this audit.
   const id = auditId || currentAuditId || '';
+  let existing   = null;
+  let taskSource = '';
   try {
     if (id) {
-      const res = await fetch(`/api/feedback/by-audit/${encodeURIComponent(id)}`);
+      const res  = await fetch(`/api/feedback/by-audit/${encodeURIComponent(id)}`);
       const data = res.ok ? await res.json() : { feedback: null };
-      if (typeof window.openResponseFeedbackForm === 'function') {
-        window.openResponseFeedbackForm(id, data.feedback || null);
-      }
-    } else {
-      if (typeof window.openResponseFeedbackForm === 'function') {
-        window.openResponseFeedbackForm('', null);
-      }
+      existing   = data.feedback || null;
+      // Server always returns the audit's task_source at the top level so we
+      // can render the "From Library" / "Own Task" chip even for audits that
+      // don't have any feedback yet.
+      taskSource = (data.task_source || existing?.task_source || '').toLowerCase();
     }
-  } catch {
-    if (typeof window.openResponseFeedbackForm === 'function') {
-      window.openResponseFeedbackForm(id, null);
-    }
+  } catch { /* silent — open form anyway */ }
+
+  if (typeof window.openUnifiedFeedback === 'function') {
+    // locked=true → dropdown is disabled, only "This Response" is offered.
+    window.openUnifiedFeedback(id, existing, /* locked */ true, taskSource);
+  } else if (typeof window.openFeedbackForm === 'function') {
+    // Fallback to old API
+    window.openFeedbackForm(id);
   }
 }
 
@@ -1585,6 +1664,7 @@ async function initRecentRuns() {
                 title="${escapeHtml(text)}">
           <div class="recent-run-text">${escapeHtml(snippet)}</div>
           <div class="recent-run-meta">
+            ${_taskSourceBadge(row.task_source)}
             <span>${escapeHtml(tool)}</span>
             <span>·</span>
             <span>${escapeHtml(when)}</span>
@@ -1688,6 +1768,7 @@ async function loadHistory(page = _historyPage) {
         <div class="history-item-body">
           <div class="history-item-input" title="${escapeHtml(row.raw_input || '')}">${escapeHtml(row.raw_input || '—')}</div>
           <div class="history-item-meta">
+            ${_taskSourceBadge(row.task_source)}
             ${isAdmin && row.user_email ? `<span class="history-email-badge"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-1px;margin-right:3px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>${escapeHtml(row.user_email)}</span>` : ''}
             <span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-1px;margin-right:3px;opacity:0.65;"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>${capitalize(row.intent || '—')}</span>
             <span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-1px;margin-right:3px;opacity:0.65;"><path d="M3 21V8l7-4 7 4v13"/><path d="M14 21h7v-9l-4-2"/><path d="M9 9v.01M9 13v.01M9 17v.01"/></svg>${capitalize(row.industry || '—')}</span>
@@ -2010,14 +2091,13 @@ async function loadTools() {
             </div>
           </div>`
       : '';
-    // Build hover tooltip — description first, then best_for, then category fallback.
-    // Tools sourced from external LLMs (GPT, Copilot, etc.) often have no description
-    // in the registry, so we surface whatever metadata is available.
-    const _desc = (info.hover_description || '').trim();
-    const _tooltip = _desc ? escapeHtml(_desc) : '';
+    // Native hover tooltip removed — keeping the data here in case we want
+    // to surface it elsewhere (e.g. detail modal) later.
+    // const _desc = (info.hover_description || '').trim();
+    // const _tooltip = _desc ? escapeHtml(_desc) : '';
 
     return `
-      <div class="tool-card" data-tool-name="${escapeHtml(name.toLowerCase())}"${_tooltip ? ` title="${_tooltip}"` : ''}>
+      <div class="tool-card" data-tool-name="${escapeHtml(name.toLowerCase())}">
         <div class="tool-card-header" style="display:flex;align-items:flex-start;gap:10px;position:relative;">
           <div class="tool-icon">${_toolIconHtml(name, info.icon, 28)}</div>
           <div style="flex:1;min-width:0;">
@@ -2996,25 +3076,40 @@ let _chatPartialInfo    = false;       // true when user proceeds with incomplet
 let _chatContinued      = false;       // true when user clicked "Continue Conversation" after generation
 let _toolRecEnabled     = true;        // session-level toggle — no DB; resets on page refresh
 
-/* ── Tool recommendation toggle button ── */
+/* ── Tool recommendation toggle button ──
+   Idempotent: re-entry into initChatPanel (e.g. after "New task") must not
+   bind the click handler twice — otherwise the toggle flips twice per click
+   and looks broken. We track binding state on the element itself. */
 function _initToolRecToggle() {
   const btn = document.getElementById('chatToolRecBtn');
   if (!btn) return;
-  btn.addEventListener('click', () => {
-    _toolRecEnabled = !_toolRecEnabled;
-    _updateToolRecBtn();
-  });
+  if (!btn._toolRecWired) {
+    btn._toolRecWired = true;
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      _toolRecEnabled = !_toolRecEnabled;
+      _updateToolRecBtn();
+    });
+  }
+  // Always sync the label to the current state — handles first paint
+  // and any case where the button was re-rendered.
+  _updateToolRecBtn();
 }
 
 function _updateToolRecBtn() {
   const btn = document.getElementById('chatToolRecBtn');
   if (!btn) return;
+  // Keep the tooltip message symmetric in both states so the user sees a
+  // consistent phrasing on first hover and every hover thereafter.
   if (_toolRecEnabled) {
     btn.textContent = 'Tool Recommendation: On';
-    btn.title       = 'Click to turn off — only the Prompt will be shown in the response';
+    btn.title       = 'Click to turn off — you will see only the Prompt';
+    btn.setAttribute('aria-pressed', 'true');
   } else {
     btn.textContent = 'Tool Recommendation: Off';
-    btn.title       = 'Click to turn on — the best Tool Recommendation will be shown with the Prompt';
+    btn.title       = 'Click to turn on — you will see the Tool Recommendation with the Prompt';
+    btn.setAttribute('aria-pressed', 'false');
   }
 }
 
@@ -3284,6 +3379,14 @@ async function _chatSend() {
   const inputEl = document.getElementById('chatInput');
   const text = inputEl.value.trim();
   if (!text) return;
+
+  // Any typed chat interaction means the user is creating their OWN task,
+  // so a stale "scenario_library" flag (and its scenario id/title) from an
+  // abandoned card click must not leak into this run. Clearing here
+  // guarantees typed = Own Task with no scenario provenance.
+  window._pendingTaskSource    = null;
+  window._pendingScenarioId    = null;
+  window._pendingScenarioTitle = null;
 
   // Remove any pending partial-choice buttons when user types an answer instead
   document.getElementById('chatPartialChoices')?.remove();

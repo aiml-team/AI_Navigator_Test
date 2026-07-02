@@ -3273,16 +3273,18 @@ textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
   left: 50%;
   transform: translate(-50%, -50%) scale(0.95);
   z-index: 10501;
-  width: 100%;
-  max-width: 520px;
+  width: 92vw;
+  max-width: 820px;
+  max-height: 92vh;
   background: #ffffff;
   border-radius: 18px;
   box-shadow: 0 24px 64px rgba(0, 50, 140, 0.22);
   font-family: 'Plus Jakarta Sans', sans-serif;
   animation: fbScaleIn 0.25s cubic-bezier(0.34, 1.1, 0.64, 1) forwards;
   overflow: hidden;
+  flex-direction: column;
 }
-.fb-form-modal.open { display: block; }
+.fb-form-modal.open { display: flex; }
 
 
 
@@ -3338,10 +3340,81 @@ textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
 .fb-close-btn:hover { background: rgba(255,255,255,0.28); }
 
 .fb-form-body {
-  padding: 16px 24px 20px;
+  padding: 16px 24px 18px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 18px;
+  row-gap: 10px;
+  overflow: visible;
+  flex: 0 0 auto;
+  min-height: 0;
+}
+/* Full-width rows: Scope, Issue Type, Comments, Attachments, Submit.
+   Email + Rating sit side-by-side. */
+.fb-form-body > .fb-field:nth-child(1),
+.fb-form-body > .fb-field:nth-child(4),
+.fb-form-body > .fb-field:nth-child(5),
+.fb-form-body > .fb-field:nth-child(6),
+.fb-form-body > .fb-submit-row {
+  grid-column: 1 / -1;
+}
+.fb-form-body .fb-submit-row {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+/* Compact textarea / dropzone so the whole form fits without scrolling */
+.fb-form-body .fb-field textarea { min-height: 56px; max-height: 56px; }
+.fb-form-body .fb-dropzone       { padding: 12px 14px; }
+.fb-form-body .fb-dropzone-icon  { font-size: 20px; margin-bottom: 2px; }
+.fb-form-body .fb-dropzone-text  { font-size: 12.5px; }
+.fb-form-body .fb-dropzone-hint  { font-size: 10.5px; margin-top: 2px; }
+.fb-form-body .fb-star           { font-size: 26px; }
+
+/* Mobile: collapse to single column */
+@media (max-width: 720px) {
+  .fb-form-modal {
+    max-width: 96vw;
+    width: 96vw;
+  }
+  .fb-form-body {
+    grid-template-columns: 1fr;
+  }
+  .fb-form-body > .fb-field,
+  .fb-form-body > .fb-submit-row {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Scope dropdown (Feedback Scope: General / Current Response) */
+.fb-scope-select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1.5px solid #cbd5e1;
+  background: #ffffff;
+  color: #1e293b;
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.fb-scope-select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+.fb-scope-hint {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #eff6ff;
+  border-left: 3px solid #2563eb;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #1e3a8a;
+  line-height: 1.5;
 }
 
 /* field labels */
@@ -3575,6 +3648,33 @@ textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
   white-space: nowrap;
 }
 .fbv-view-files-btn:hover { background: #dbeafe; }
+
+/* "Open" button — Feedback Dashboard → opens the source audit log for
+   response-specific feedback (uses openLogModal from ui.js). */
+.fbv-open-log-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 14px;
+  background: #2563eb;
+  border: 1.5px solid #2563eb;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffffff;
+  cursor: pointer;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+}
+.fbv-open-log-btn:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+}
+
+/* Lift the audit log modal above the Feedback Dashboard when opened from it */
+.modal-overlay.fbv-log-elevated { z-index: 11000 !important; }
 
 /* submit row */
 .fb-submit-row {

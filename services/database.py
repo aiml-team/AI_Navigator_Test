@@ -243,7 +243,10 @@ def init_db():
             policy_blocked      INT            NULL DEFAULT 0,
             policy_summary      NVARCHAR(MAX)  NULL DEFAULT '',
             role                NVARCHAR(255)  NULL DEFAULT 'general',
-            user_email          NVARCHAR(255)  NULL DEFAULT ''
+            user_email          NVARCHAR(255)  NULL DEFAULT '',
+            task_source         NVARCHAR(50)   NULL DEFAULT 'typed',
+            scenario_id         NVARCHAR(64)   NULL DEFAULT '',
+            scenario_title      NVARCHAR(500)  NULL DEFAULT ''
         )
         """,
         """
@@ -257,7 +260,8 @@ def init_db():
             issue_type  NVARCHAR(255)  NULL,
             created_at  NVARCHAR(50)   NULL,
             source      NVARCHAR(50)   NULL DEFAULT 'form',
-            files       NVARCHAR(MAX)  NULL DEFAULT '[]'
+            files       NVARCHAR(MAX)  NULL DEFAULT '[]',
+            task_source NVARCHAR(50)   NULL DEFAULT ''
         )
         """,
         """
@@ -394,7 +398,9 @@ def init_db():
             scenario    NVARCHAR(MAX)  NULL DEFAULT '',
             task_type   NVARCHAR(255)  NULL DEFAULT '',
             source      NVARCHAR(50)   NULL DEFAULT 'excel',
-            created_at  NVARCHAR(50)   NULL DEFAULT ''
+            created_at  NVARCHAR(50)   NULL DEFAULT '',
+            summary     NVARCHAR(MAX)  NULL DEFAULT '',
+            is_tested   INT            NULL DEFAULT 0
         )
         """,
     ]
@@ -423,6 +429,20 @@ def _add_columns_if_missing(conn: AzureSqlConn):
         ("feedback",            "files",           "NVARCHAR(MAX) NULL DEFAULT '[]'"),
         ("technical_feedbacks", "feature_area",    "NVARCHAR(100) NULL DEFAULT ''"),
         ("registered_tools",    "source",          "NVARCHAR(50) NULL DEFAULT 'manual'"),
+        ("scenarios",           "summary",         "NVARCHAR(MAX) NULL DEFAULT ''"),
+        ("audit_log",           "task_source",     "NVARCHAR(50) NULL DEFAULT 'typed'"),
+        ("feedback",            "task_source",     "NVARCHAR(50) NULL DEFAULT ''"),
+        # Scenario Library provenance — populated on runs that originate from
+        # the Scenario Library so the View modal can show which scenario the
+        # user selected. Both nullable/blank for typed runs and for historical
+        # rows that pre-date this column.
+        ("audit_log",           "scenario_id",     "NVARCHAR(64) NULL DEFAULT ''"),
+        ("audit_log",           "scenario_title",  "NVARCHAR(500) NULL DEFAULT ''"),
+        # Temporary beta-tracking flag on live scenarios so admins can mark a
+        # scenario Tested / Untested from the Scenario Library card. Default 0
+        # (Untested) so every existing row shows the beta chip until an admin
+        # flips it. See routes/scenarios.py toggle endpoint.
+        ("scenarios",           "is_tested",       "INT NULL DEFAULT 0"),
     ]
     for table, col, definition in additions:
         try:

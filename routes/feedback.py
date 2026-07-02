@@ -220,17 +220,37 @@ async def submit_feedback(
     folder      = existing_folder if is_update else f"feedback/{created_at[:10]}_{feedback_id}"
     record_created_at = existing_created_at if is_update else created_at
 
+    # Denormalise the task origin from audit_log so the Feedback Dashboard
+    # can show a "From Library" / "Own Task" badge without an extra join.
+    # Blank when audit_id is missing (e.g. general FAB feedback) — the UI
+    # treats blank as "not applicable" and renders nothing.
+    task_source = ""
+    if audit_id:
+        try:
+            _db_ts = get_db()
+            _row_ts = _db_ts.execute(
+                "SELECT TOP 1 ISNULL(task_source, '') AS task_source "
+                "FROM audit_log WHERE id = ?",
+                (audit_id,),
+            ).fetchone()
+            _db_ts.close()
+            if _row_ts:
+                task_source = (_row_ts["task_source"] or "").strip().lower()
+        except Exception as _e:
+            print(f"[feedback] task_source lookup failed for audit_id={audit_id}: {_e}")
+
     metadata = {
-        "id":         feedback_id,
-        "audit_id":   audit_id,
-        "email":      email,
-        "rating":     rating,
-        "comment":    comment,
-        "issue_type": issue_type,
-        "source":     source,
-        "created_at": record_created_at,
-        "updated_at": created_at if is_update else None,
-        "files":      [],
+        "id":          feedback_id,
+        "audit_id":    audit_id,
+        "email":       email,
+        "rating":      rating,
+        "comment":     comment,
+        "issue_type":  issue_type,
+        "source":      source,
+        "created_at":  record_created_at,
+        "updated_at":  created_at if is_update else None,
+        "files":       [],
+        "task_source": task_source,
     }
 
     uploaded_files = []
@@ -271,15 +291,15 @@ async def submit_feedback(
         db = get_db()
         if is_update:
             db.execute(
-                """UPDATE feedback SET rating=?, comment=?, issue_type=?, source=?, files=?
+                """UPDATE feedback SET rating=?, comment=?, issue_type=?, source=?, files=?, task_source=?
                    WHERE id=?""",
                 (rating, comment or "", issue_type or "", source or "form",
-                 json.dumps(uploaded_files), feedback_id),
+                 json.dumps(uploaded_files), task_source or "", feedback_id),
             )
         else:
             db.execute(
-                """INSERT INTO feedback (id, audit_id, email, rating, comment, issue_type, created_at, source, files)
-                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                """INSERT INTO feedback (id, audit_id, email, rating, comment, issue_type, created_at, source, files, task_source)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
                 (
                     feedback_id,
                     audit_id or "",
@@ -290,6 +310,7 @@ async def submit_feedback(
                     created_at,
                     source or "form",
                     json.dumps(uploaded_files),
+                    task_source or "",
                 ),
             )
         db.commit()
@@ -329,26 +350,42 @@ async def submit_feedback(
 
 @router.get("/api/feedback/by-audit/{audit_id}")
 async def get_feedback_by_audit(audit_id: str):
-    """Return the most recent feedback record for a given audit_id (or null)."""
+    """
+    Return the most recent feedback record for a given audit_id (or null).
+    Always returns the audit's `task_source` alongside so the feedback modal
+    can show a "From Library" / "Own Task" badge even when no feedback
+    exists yet.
+    """
     try:
         db  = get_db()
         row = db.execute(
             "SELECT * FROM feedback WHERE audit_id = ? ORDER BY created_at DESC",
             (audit_id,),
         ).fetchone()
+
+        # Always look up the audit's task_source — cheap single-row query.
+        audit_row = db.execute(
+            "SELECT TOP 1 ISNULL(task_source, '') AS task_source "
+            "FROM audit_log WHERE id = ?",
+            (audit_id,),
+        ).fetchone()
         db.close()
     except Exception as e:
         raise HTTPException(500, str(e))
 
+    task_source = (audit_row["task_source"] if audit_row else "") or ""
+
     if not row:
-        return {"feedback": None}
+        return {"feedback": None, "task_source": task_source}
 
     fb = dict(row)
     try:
         fb["files"] = json.loads(fb.get("files") or "[]")
     except Exception:
         fb["files"] = []
-    return {"feedback": fb}
+    # Prefer the audit's authoritative task_source over any denormalised copy.
+    fb["task_source"] = task_source or fb.get("task_source", "")
+    return {"feedback": fb, "task_source": task_source}
 
 
 # ───────────────────────────────────────────────────────────────
@@ -461,7 +498,7 @@ async def list_feedback(
 # ───────────────────────────────────────────────────────────────
 _FEEDBACK_CSV_COLUMNS = [
     "created_at", "email", "rating", "issue_type",
-    "comment", "source", "audit_id", "id",
+    "comment", "source", "task_source", "audit_id", "id",
     "files",
 ]
 

@@ -42,6 +42,16 @@ class RunRequest(BaseModel):
     data_sensitivity: Optional[str] = "general"
     user_email: Optional[str] = ""
     skip_tool_recommendation: Optional[bool] = False
+    # "scenario_library" when the task originated from the Scenario Library;
+    # "typed" (default) when the user wrote it themselves. Used to render a
+    # source badge in History + Feedback views.
+    task_source: Optional[str] = "typed"
+    # When task_source == "scenario_library", these carry the picked
+    # scenario's id + title so the View modal can display the scenario name
+    # alongside the "Provide Feedback on this Response" button. Empty for
+    # typed runs. Backend stores them verbatim on audit_log.
+    scenario_id: Optional[str] = ""
+    scenario_title: Optional[str] = ""
 
 
 class FeedbackRequest(BaseModel):

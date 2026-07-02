@@ -175,6 +175,14 @@ async function openLogModal(auditId) {
   const modal = document.getElementById('logModal');
   const body  = document.getElementById('logModalBody');
   _currentLogRow = null;
+  // Hide any stale scenario-title chip from a previous open — the new row's
+  // provenance is applied below once the audit_log fetch resolves.
+  const _scenarioChipEl = document.getElementById('logModalScenarioChip');
+  if (_scenarioChipEl) {
+    _scenarioChipEl.style.display = 'none';
+    _scenarioChipEl.textContent   = '';
+    _scenarioChipEl.title         = '';
+  }
   modal.classList.add('open');
   body.innerHTML = '<div class="loading-spinner"><div class="spinner"></div></div>';
 
@@ -203,6 +211,27 @@ async function openLogModal(auditId) {
     try { policies    = JSON.parse(mergedRow.retrieved_policies || '[]'); } catch {}
 
     _currentLogRow = mergedRow;
+
+    // Scenario provenance chip in the modal header — only shown for runs
+    // that originated from the Scenario Library AND that have a persisted
+    // scenario_title (i.e. runs created after the scenario_title column was
+    // added). Placed to the left of the "Provide Feedback on this Response"
+    // button so it's visible when cross-checking which scenario produced the
+    // response. See templates/index.html #logModalScenarioChip.
+    if (_scenarioChipEl) {
+      const _ts    = (mergedRow.task_source    || '').toString().toLowerCase();
+      const _title = (mergedRow.scenario_title || '').toString().trim();
+      if (_ts === 'scenario_library' && _title) {
+        _scenarioChipEl.textContent   = _title;
+        _scenarioChipEl.title         = 'Scenario: ' + _title;
+        _scenarioChipEl.style.display = 'inline-flex';
+      } else {
+        _scenarioChipEl.style.display = 'none';
+        _scenarioChipEl.textContent   = '';
+        _scenarioChipEl.title         = '';
+      }
+    }
+
     body.innerHTML = renderAuditLog(mergedRow, policyFlags, policies);
     wireEditActions(auditId, mergedRow, policyFlags, policies);
 
@@ -281,7 +310,21 @@ async function openLogModal(auditId) {
 }
 
 function closeLogModal() {
-  document.getElementById('logModal').classList.remove('open');
+  const el = document.getElementById('logModal');
+  el.classList.remove('open');
+  // Clear the elevation flag set when opened from the Feedback Dashboard
+  // (see static/js/feedback.js — fbv-open-log-btn handler). This way the
+  // next regular openLogModal() call from History/Audit goes back to the
+  // default z-index without leaving stale styling behind.
+  el.classList.remove('fbv-log-elevated');
+  // Hide the scenario-title chip on close so it doesn't flash stale text
+  // for a frame when the next audit row is opened.
+  const chip = document.getElementById('logModalScenarioChip');
+  if (chip) {
+    chip.style.display = 'none';
+    chip.textContent   = '';
+    chip.title         = '';
+  }
 }
 
 

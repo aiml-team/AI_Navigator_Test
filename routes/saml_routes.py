@@ -9,6 +9,10 @@ Okta SAML 2.0 SSO endpoints:
   GET  /api/auth/me   → returns the current session user (used by JS)
 """
 
+# ──────────────────────────────────────────────────────────────────────────
+#  OKTA SSO ENABLED — router active and registered in routes/__init__.py.
+# ──────────────────────────────────────────────────────────────────────────
+
 import os
 from pathlib import Path
 

@@ -4,6 +4,10 @@ services/saml_service.py
 Wraps python3-saml to provide SP settings for Okta SSO.
 """
 
+# ──────────────────────────────────────────────────────────────────────────
+#  OKTA SSO ENABLED — module active. See routes/saml_routes.py for endpoints.
+# ──────────────────────────────────────────────────────────────────────────
+
 import os
 from pathlib import Path
 
@@ -33,7 +37,7 @@ def _read_key(path: str) -> str:
 def get_saml_settings() -> dict:
     base_url = os.getenv(
         "APP_BASE_URL",
-        "https://ai-navigator-test-cbeedsgsd8hyfefq.northeurope-01.azurewebsites.net"
+        "https://ai-navigator-ashpbzhbcmgeerbt.northeurope-01.azurewebsites.net"
     ).rstrip("/")
 
     sp_cert = _read_cert("saml/sp.crt")

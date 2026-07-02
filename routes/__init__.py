@@ -13,6 +13,7 @@ from routes.auth_routes import router as auth_router
 from routes.personalization import router as personalization_router
 from routes.technical_feedback import router as tech_feedback_router
 from routes.saved_scenarios import router as saved_scenarios_router
+# ── OKTA SSO ENABLED ───────────────────────────────────────────────────
 from routes.saml_routes import router as saml_router
 
 router = APIRouter()
@@ -30,4 +31,5 @@ router.include_router(auth_router)
 router.include_router(personalization_router)
 router.include_router(tech_feedback_router)
 router.include_router(saved_scenarios_router)
+# ── OKTA SSO ENABLED ───────────────────────────────────────────────────
 router.include_router(saml_router)
