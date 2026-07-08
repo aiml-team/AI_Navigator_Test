@@ -20,7 +20,7 @@ function getLoggedInEmail() {
      FEEDBACK FORM MODAL
   ═══════════════════════════════════════ */
   const ISSUE_TYPES = [
-    'Worked Well', 'Helpful Output', 'Saved Time', 'Good Tool Recommendation', 'Wrong Tool', 'Poor Output', 'Missing Feature',
+    'Worked Well', 'Helpful Output', 'Time Saved', 'Good Tool Recommendation', 'Wrong Tool', 'Poor Output', 'Missing Feature',
     'Slow Response', 'UI Issue', 'Other'
   ];
 
@@ -915,7 +915,7 @@ function openViewer() {
         dl.href = `/api/export/feedback.csv?${dlParams.toString()}`;
       }
     } catch (err) {
-      viewerBody.innerHTML = `<div class="fbv-empty"><div class="fbv-empty-icon">⚠️</div>Could not load feedbacks: ${escFbv(err.message)}</div>`;
+      viewerBody.innerHTML = `<div class="fbv-empty"><div class="fbv-empty-icon">⚠️</div>Could not load feedback: ${escFbv(err.message)}</div>`;
     } finally {
       vLoading = false;
     }
@@ -926,7 +926,7 @@ function openViewer() {
     viewerBody.innerHTML = `
       <div class="fbv-loading">
         <div class="fbv-spinner"></div>
-        <span>Loading feedbacks…</span>
+        <span>Loading feedback…</span>
       </div>`;
   }
 
@@ -942,22 +942,22 @@ function openViewer() {
     const kpiHtml = `
       <div class="fbv-kpi-row">
         <div class="fbv-kpi">
-          <div class="fbv-kpi-label">Total Feedbacks</div>
+          <div class="fbv-kpi-label">Total Feedback Items</div>
           <div class="fbv-kpi-value">${total}</div>
           <div class="fbv-kpi-sub">all time</div>
         </div>
         <div class="fbv-kpi">
-          <div class="fbv-kpi-label">Avg Rating</div>
+          <div class="fbv-kpi-label">Average Rating</div>
           <div class="fbv-kpi-value" style="color:#f59e0b;">${avg ? avg.toFixed(1) : '—'}</div>
-          <div class="fbv-kpi-sub">out of 5 ★</div>
+          <div class="fbv-kpi-sub">out of 5 Stars</div>
         </div>
         <div class="fbv-kpi">
-          <div class="fbv-kpi-label">5-Star Reviews</div>
+          <div class="fbv-kpi-label">5-Star Ratings</div>
           <div class="fbv-kpi-value" style="color:#10b981;">${dist.find(d => d.rating === 5)?.count || 0}</div>
           <div class="fbv-kpi-sub">excellent ratings</div>
         </div>
         <div class="fbv-kpi">
-          <div class="fbv-kpi-label">Low Ratings (≤2)</div>
+          <div class="fbv-kpi-label">Low Ratings (≤2 Stars)</div>
           <div class="fbv-kpi-value" style="color:#ef4444;">${dist.filter(d => d.rating <= 2).reduce((s, d) => s + d.count, 0)}</div>
           <div class="fbv-kpi-sub">need attention</div>
         </div>
@@ -984,12 +984,12 @@ function openViewer() {
 
     let tableHtml;
     if (!rows.length) {
-      tableHtml = `<div class="fbv-table-card"><div class="fbv-empty"><div class="fbv-empty-icon">📭</div>No feedbacks found for ${escFbv(periodLabel)}</div></div>`;
+      tableHtml = `<div class="fbv-table-card"><div class="fbv-empty"><div class="fbv-empty-icon">📭</div>No feedback found for ${escFbv(periodLabel)}</div></div>`;
     } else {
       tableHtml = `
         <div class="fbv-table-card">
           <div class="fbv-table-header">
-            <span class="fbv-table-title">Feedbacks — ${escFbv(periodLabel)}</span>
+            <span class="fbv-table-title">Feedback Items — ${escFbv(periodLabel)}</span>
             <span class="fbv-table-count">Showing ${((vPage - 1) * vPerPage) + 1}–${Math.min(vPage * vPerPage, total)} of ${total}</span>
           </div>
           <div style="overflow-x:auto;">

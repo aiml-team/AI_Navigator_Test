@@ -579,13 +579,13 @@
         data-is-tested="${isTested ? 1 : 0}"
         data-summary="${encodeURIComponent(s.summary || '')}">
         <div class="sl-card-meta">
-          ${s.task_type ? `<span class="sl-card-persona">🏷 ${_esc(s.task_type)}</span>` : ''}
+          ${s.task_type ? `<span class="sl-card-persona">${_esc(s.task_type)}</span>` : ''}
           ${betaChipHtml}
         </div>
         <div class="sl-card-title">${_esc(s.title || '')}</div>
         <div class="sl-card-body">${_esc(previewText)}${moreLink ? ' ' + moreLink : ''}</div>
         <div class="sl-card-actions">
-          <button class="sl-btn-generate" style="display:inline-flex;align-items:center;gap:4px;">${_SVG.generate} Edit &amp; Generate</button>
+          <button class="sl-btn-generate" style="display:inline-flex;align-items:center;gap:4px;">${_SVG.generate} Edit and Generate</button>
           <button class="sl-btn-copy"     style="display:inline-flex;align-items:center;gap:4px;">${_SVG.copy} Copy</button>
           <button class="sl-btn-fav ${fav ? 'sl-fav-saved' : ''}" style="display:inline-flex;align-items:center;gap:4px;">
             ${fav ? _SVG.bookmarkFilled + ' Saved' : _SVG.bookmark + ' Save'}
@@ -730,6 +730,7 @@
         const mega     = card.dataset.mega || '';
         const cat      = card.dataset.cat || '';
         const idx      = SL_FAVORITES.findIndex(f => f.title === title);
+        const nowFav   = idx < 0;  // will become a favourite after this click
         if (idx >= 0) {
           SL_FAVORITES.splice(idx, 1);
           btn.innerHTML = _SVG.bookmark + ' Save';
@@ -743,6 +744,26 @@
           _addFavoriteToServer(entry);
         }
         _cacheFavoritesLocally();
+
+        /* Sync the twin Save button on the same scenario's card living in
+           the other grid (main list ↔ favorites panel). Without this, the
+           clicked button updates but its twin keeps its stale highlight —
+           e.g. unfavouriting from the Favorites panel left the main-grid
+           card's Save button still showing "Saved". Scoped to matching
+           titles only; skips the button we just handled. */
+        document.querySelectorAll('.sl-card').forEach(otherCard => {
+          if (otherCard === card) return;
+          if (decodeURIComponent(otherCard.dataset.title || '') !== title) return;
+          const otherBtn = otherCard.querySelector('.sl-btn-fav');
+          if (!otherBtn) return;
+          if (nowFav) {
+            otherBtn.classList.add('sl-fav-saved');
+            otherBtn.innerHTML = _SVG.bookmarkFilled + ' Saved';
+          } else {
+            otherBtn.classList.remove('sl-fav-saved');
+            otherBtn.innerHTML = _SVG.bookmark + ' Save';
+          }
+        });
       });
     });
   }
@@ -951,7 +972,7 @@
       e.personaChip.style.display = 'none';
     }
     if (data.taskType) {
-      e.taskChip.textContent = '🏷 ' + data.taskType;
+      e.taskChip.textContent = data.taskType;
       e.taskChip.style.display = '';
     } else {
       e.taskChip.style.display = 'none';

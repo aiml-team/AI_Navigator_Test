@@ -37,7 +37,7 @@ def _read_key(path: str) -> str:
 def get_saml_settings() -> dict:
     base_url = os.getenv(
         "APP_BASE_URL",
-        "https://ai-navigator-ashpbzhbcmgeerbt.northeurope-01.azurewebsites.net"
+        "https://ai-navigator-test-cbeedsgsd8hyfefq.northeurope-01.azurewebsites.net"
     ).rstrip("/")
 
     sp_cert = _read_cert("saml/sp.crt")

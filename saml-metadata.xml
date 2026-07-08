@@ -2,7 +2,7 @@
 <md:EntityDescriptor
     xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata"
     xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
-    entityID="https://ai-navigator-ashpbzhbcmgeerbt.northeurope-01.azurewebsites.net/saml/metadata">
+    entityID="https://ai-navigator-test-cbeedsgsd8hyfefq.northeurope-01.azurewebsites.net/saml/metadata">
   <md:SPSSODescriptor
       AuthnRequestsSigned="false"
       WantAssertionsSigned="true"
@@ -17,7 +17,7 @@
     <md:NameIDFormat>urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress</md:NameIDFormat>
     <md:AssertionConsumerService
         Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
-        Location="https://ai-navigator-ashpbzhbcmgeerbt.northeurope-01.azurewebsites.net/saml/acs"
+        Location="https://ai-navigator-test-cbeedsgsd8hyfefq.northeurope-01.azurewebsites.net/saml/acs"
         index="1"/>
   </md:SPSSODescriptor>
 </md:EntityDescriptor>

@@ -268,14 +268,10 @@ window._pendingScenarioTitle = null;
 function _taskSourceBadge(taskSource) {
   const src = (taskSource || '').trim().toLowerCase();
   if (src === 'scenario_library') {
-    return `<span class="task-source-badge task-source-lib" title="Task selected from the Scenario Library">
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-1px;margin-right:3px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-      From Library</span>`;
+    return `<span class="task-source-badge task-source-lib" title="Task selected from the Scenario Library">From Library</span>`;
   }
   if (src === 'typed') {
-    return `<span class="task-source-badge task-source-own" title="Task written by the user">
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-1px;margin-right:3px;"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-      Custom Task</span>`;
+    return `<span class="task-source-badge task-source-own" title="Task written by the user">Custom Task</span>`;
   }
   // Blank / unknown → no badge. Historical rows fall here.
   return '';
@@ -3103,12 +3099,12 @@ function _updateToolRecBtn() {
   // Keep the tooltip message symmetric in both states so the user sees a
   // consistent phrasing on first hover and every hover thereafter.
   if (_toolRecEnabled) {
-    btn.textContent = 'Tool Recommendation: On';
+    btn.textContent = 'Recommendations On';
     btn.title       = 'Click to turn off — you will see only the Prompt';
     btn.setAttribute('aria-pressed', 'true');
   } else {
-    btn.textContent = 'Tool Recommendation: Off';
-    btn.title       = 'Click to turn on — you will see the Tool Recommendation with the Prompt';
+    btn.textContent = 'Recommendations Off';
+    btn.title       = 'Click to turn on — you will see the Recommendations with the Prompt';
     btn.setAttribute('aria-pressed', 'false');
   }
 }
@@ -3970,7 +3966,7 @@ function _startNewChat() {
   if (savedRole && savedRole.toLowerCase() !== 'general') {
     _chatExtracted.role = savedRole;
   }
-  const greeting = `Hi — what would you like to do today?`;
+  const greeting = `Hi! What would you like to do today?`;
   _chatAddMessage('agent', greeting);
 }
 
